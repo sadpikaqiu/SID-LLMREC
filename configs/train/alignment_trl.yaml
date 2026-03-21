@@ -1,0 +1,21 @@
+stage: alignment
+backend: trl
+dataset: NYC
+model_profile: qwen2.5-7b-instruct
+train_path: artifacts/NYC/alignment/train_align.json
+valid_path: artifacts/NYC/alignment/valid_align.json
+output_dir: checkpoints/NYC/alignment/qwen25_7b
+batch_size: 16
+gradient_accumulation_steps: 2
+num_train_epochs: 6
+learning_rate: 2.0e-5
+cutoff_len: 1024
+seed: 42
+wandb_project: gnprsid-alignment
+wandb_run_name: nyc-align-qwen25
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - embed_tokens

@@ -1,0 +1,11 @@
+stage: grpo
+backend: placeholder
+dataset: NYC
+model_profile: qwen2.5-7b-instruct
+train_path: artifacts/NYC/llm/sid/current/train.jsonl
+valid_path: artifacts/NYC/llm/sid/current/val.jsonl
+output_dir: checkpoints/NYC/grpo/qwen25_7b_sid_current
+notes: >
+  GRPO is intentionally reserved as a backend interface in the first Linux-first version.
+  Replace backend=placeholder with a concrete GRPO backend after defining reward data,
+  rollout strategy, and trainer integration.

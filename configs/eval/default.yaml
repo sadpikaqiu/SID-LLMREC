@@ -1,0 +1,6 @@
+dataset: NYC
+repr: sid
+history_source: current
+top_k_retrieval: 5
+prediction_path: outputs/NYC/predictions/latest.json
+eval_output_path: outputs/NYC/eval/latest.json

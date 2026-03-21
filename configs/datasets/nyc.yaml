@@ -1,0 +1,11 @@
+dataset: NYC
+current_k: 49
+raw_dir: data/NYC/raw
+interim_dir: data/NYC/interim
+processed_dir: data/NYC/processed
+artifacts_dir: artifacts/NYC
+outputs_dir: outputs/NYC
+legacy:
+  dataset_dir: datasets/NYC
+  data_subdir: datasets/NYC/data
+  eval_subdir: datasets/NYC/eval

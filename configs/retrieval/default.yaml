@@ -1,0 +1,9 @@
+model_profile: qwen2.5-7b-instruct
+repr: sid
+top_k: 35
+max_length: 2048
+dtype: bfloat16
+pooling: mean
+load_in_4bit: false
+device_map: auto
+split: test

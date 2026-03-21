@@ -1,0 +1,19 @@
+stage: sft
+backend: llamafactory
+dataset: NYC
+model_profile: qwen2.5-7b-instruct
+train_path: artifacts/NYC/llm/sid/current/train.jsonl
+valid_path: artifacts/NYC/llm/sid/current/val.jsonl
+output_dir: checkpoints/NYC/sft/qwen25_7b_sid_current
+cutoff_len: 3072
+template: qwen
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 2
+learning_rate: 2.0e-5
+num_train_epochs: 5
+lora_target:
+  - q_proj
+  - k_proj
+  - v_proj
+  - gate_proj
+  - up_proj

@@ -101,16 +101,15 @@ class AlignmentTRLBackend(TrainingBackend):
         try:
             import torch
             from datasets import load_dataset
-            from peft import LoraConfig, get_peft_model
-            from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
-            from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
+            from peft import LoraConfig
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from trl import SFTConfig, SFTTrainer
         except ImportError as error:
             raise ImportError(
                 "Alignment training requires torch, datasets, transformers, peft, and trl."
             ) from error
 
         from gnprsid.common.runtime import resolve_torch_dtype, set_seed
-        from gnprsid.train.formatting import RESPONSE_TEMPLATE, format_instruction_completion
 
         cfg = context.stage_config
         model_cfg = context.model_profile
@@ -145,15 +144,36 @@ class AlignmentTRLBackend(TrainingBackend):
             task_type="CAUSAL_LM",
             bias="none",
         )
-        model = get_peft_model(model, lora_cfg)
 
-        collator = DataCollatorForCompletionOnlyLM(
-            response_template=RESPONSE_TEMPLATE,
-            tokenizer=tokenizer,
-            mlm=False,
+        eos_token = tokenizer.eos_token or ""
+
+        def to_prompt_completion(batch):
+            prompts = []
+            completions = []
+            for instruction, input_text, output_text in zip(batch["instruction"], batch["input"], batch["output"]):
+                prompts.append(
+                    "### Instruction:\n"
+                    f"{str(instruction).strip()}\n\n"
+                    "### Input:\n"
+                    f"{str(input_text).strip()}\n\n"
+                    "### Response:\n"
+                )
+                completions.append(f"{str(output_text).strip()}{eos_token}")
+            return {"prompt": prompts, "completion": completions}
+
+        train_data = train_data.map(
+            to_prompt_completion,
+            batched=True,
+            remove_columns=train_data.column_names,
         )
+        eval_data = eval_data.map(
+            to_prompt_completion,
+            batched=True,
+            remove_columns=eval_data.column_names,
+        )
+
         bf16 = str(cfg.get("dtype", model_cfg.get("dtype", "auto"))).lower() == "bfloat16"
-        training_args = TrainingArguments(
+        training_args = SFTConfig(
             output_dir=str(context.output_dir),
             per_device_train_batch_size=int(cfg["batch_size"]),
             per_device_eval_batch_size=int(cfg["batch_size"]),
@@ -168,17 +188,16 @@ class AlignmentTRLBackend(TrainingBackend):
             bf16=bf16,
             report_to="wandb" if cfg.get("wandb_project") else "none",
             run_name=str(cfg.get("wandb_run_name", "alignment")),
-            remove_unused_columns=False,
+            max_length=int(cfg["cutoff_len"]),
+            completion_only_loss=True,
         )
         trainer = SFTTrainer(
             model=model,
             train_dataset=train_data,
             eval_dataset=eval_data,
             args=training_args,
-            tokenizer=tokenizer,
-            formatting_func=format_instruction_completion,
-            max_seq_length=int(cfg["cutoff_len"]),
-            data_collator=collator,
+            processing_class=tokenizer,
+            peft_config=lora_cfg,
         )
         trainer.train()
 

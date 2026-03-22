@@ -74,5 +74,5 @@ python -m gnprsid.cli eval summarize --dataset NYC
 - The legacy project stays untouched. Import once, then operate entirely inside this project.
 - Official retrieval defaults use `Qwen2.5-7B-Instruct + bf16 + mean pooling + max_length=2048`.
 - Alignment data follows the V2 bidirectional design: `POI attributes -> SID` and `SID -> POI attributes`.
-- The imported NYC `poi_info.csv` does not expose latitude/longitude in the legacy layout, so alignment data uses the stable attributes that are actually present after import: category, region, visit hours, visit count, and unique user count.
+- NYC import enriches `poi_info.csv` with latitude/longitude from the raw `NYC.txt` check-in table, so alignment data includes category, region, latitude, longitude, visit hours, visit count, and unique user count.
 - `GRPO` is reserved as a backend interface but not implemented in this first version.

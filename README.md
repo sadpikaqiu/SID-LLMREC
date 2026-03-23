@@ -28,6 +28,7 @@ python -m gnprsid.cli sid train --config configs/train/sid_nyc.yaml
 python -m gnprsid.cli sid export --config configs/train/sid_nyc.yaml
 python -m gnprsid.cli alignment build-data --dataset NYC
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_trl.yaml
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b/final
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test --config configs/retrieval/default.yaml
 python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source retrieval --model-config configs/models/qwen25_7b.yaml
@@ -53,6 +54,9 @@ python -m gnprsid.cli alignment build-data --dataset NYC \
   --sid-map-path artifacts/NYC/sid/pid_to_sid.json
 
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_trl.yaml
+python -m gnprsid.cli train merge-peft \
+  --model-config configs/models/qwen25_7b.yaml \
+  --adapter-path checkpoints/NYC/alignment/qwen25_7b/final
 python -m gnprsid.cli train run --stage sft --config configs/train/sft_llamafactory.yaml
 
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid

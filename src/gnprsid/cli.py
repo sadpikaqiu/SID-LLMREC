@@ -40,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = train_sub.add_parser("run")
     run_parser.add_argument("--stage", choices=["alignment", "sft", "grpo"], required=True)
     run_parser.add_argument("--config", required=True)
+    merge_parser = train_sub.add_parser("merge-peft")
+    merge_parser.add_argument("--model-config", required=True)
+    merge_parser.add_argument("--adapter-path", required=True)
+    merge_parser.add_argument("--output-path", default=None)
 
     retrieval_parser = subparsers.add_parser("retrieval")
     retrieval_sub = retrieval_parser.add_subparsers(dest="retrieval_command", required=True)
@@ -125,9 +129,18 @@ def main() -> None:
             seed=args.seed,
         )
     elif args.command_group == "train":
-        from gnprsid.train.base import run_training_stage
+        if args.train_command == "run":
+            from gnprsid.train.base import run_training_stage
 
-        result = run_training_stage(args.config, stage_override=args.stage)
+            result = run_training_stage(args.config, stage_override=args.stage)
+        else:
+            from gnprsid.train.merge import merge_peft_adapter
+
+            result = merge_peft_adapter(
+                model_config_path=args.model_config,
+                adapter_path=args.adapter_path,
+                output_path=args.output_path,
+            )
     elif args.command_group == "retrieval":
         if args.retrieval_command == "build-bank":
             from gnprsid.retrieval.bank import build_retrieval_bank

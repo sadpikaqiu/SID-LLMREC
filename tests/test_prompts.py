@@ -1,4 +1,4 @@
-from gnprsid.prompts.render import build_prompt, build_supervised_prompt
+from gnprsid.prompts.render import build_prompt, build_supervised_prompt, system_prompt
 
 
 def sample(repr_name="id"):
@@ -36,3 +36,11 @@ def test_supervised_prompt_uses_single_target_requirement():
     prompt = build_supervised_prompt(sample("id"), "current")
     assert "exactly 1" in prompt
     assert "exactly 10" not in prompt
+
+
+def test_system_prompt_candidate_count_is_configurable():
+    single = system_prompt("sid", "current", candidate_count=1)
+    topk = system_prompt("sid", "current", candidate_count=10)
+    assert "exactly 1" in single
+    assert "exactly 10" not in single
+    assert "exactly 10" in topk

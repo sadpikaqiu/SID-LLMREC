@@ -31,6 +31,129 @@ def render_chat_prompts(tokenizer, message_batches: list[list[dict[str, str]]]) 
     return prompts
 
 
+def _build_candidate_sequence_map(tokenizer, allowed_completions: list[str]) -> dict[tuple[int, ...], str]:
+    sequence_map: dict[tuple[int, ...], str] = {}
+    for text in allowed_completions:
+        token_ids = tokenizer.encode(text, add_special_tokens=False)
+        if token_ids:
+            sequence_map.setdefault(tuple(token_ids), text)
+    if not sequence_map:
+        raise ValueError("allowed_completions must contain at least one tokenizable completion")
+    return sequence_map
+
+
+def _build_token_trie(sequences: Iterable[tuple[int, ...]]) -> dict[int | str, dict]:
+    root: dict[int | str, dict] = {}
+    for sequence in sequences:
+        node = root
+        for token_id in sequence:
+            node = node.setdefault(token_id, {})
+        node["__end__"] = {}
+    return root
+
+
+def _lookup_allowed_tokens(
+    trie: dict[int | str, dict],
+    generated_ids: list[int],
+    eos_token_id: int | None,
+) -> list[int]:
+    node = trie
+    for token_id in generated_ids:
+        next_node = node.get(token_id)
+        if next_node is None:
+            return [eos_token_id] if eos_token_id is not None else []
+        node = next_node
+
+    allowed = [token_id for token_id in node.keys() if token_id != "__end__"]
+    if "__end__" in node and eos_token_id is not None:
+        allowed.append(eos_token_id)
+    return allowed
+
+
+def _trim_after_eos(token_ids: list[int], eos_token_id: int | None) -> tuple[int, ...]:
+    if eos_token_id is None:
+        return tuple(token_ids)
+    if eos_token_id in token_ids:
+        return tuple(token_ids[: token_ids.index(eos_token_id)])
+    return tuple(token_ids)
+
+
+def _generate_constrained_topk(
+    model_cfg: dict,
+    tokenizer,
+    model,
+    prompts: list[str],
+    batch_size: int,
+    allowed_completions: list[str],
+    top_k_sequences: int,
+) -> list[str]:
+    import torch
+    from tqdm import tqdm
+
+    sequence_map = _build_candidate_sequence_map(tokenizer, allowed_completions)
+    trie = _build_token_trie(sequence_map.keys())
+    eos_token_id = tokenizer.eos_token_id
+    max_candidate_len = max(len(sequence) for sequence in sequence_map)
+    num_return_sequences = min(top_k_sequences, len(sequence_map))
+    num_beams = min(len(sequence_map), max(num_return_sequences * 5, 50))
+    results: list[str] = []
+    model_device = next(model.parameters()).device
+
+    total_batches = (len(prompts) + batch_size - 1) // batch_size
+    for start in tqdm(
+        range(0, len(prompts), batch_size),
+        total=total_batches,
+        desc="Generating",
+    ):
+        prompt_batch = prompts[start : start + batch_size]
+        inputs = tokenizer(
+            prompt_batch,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=int(model_cfg.get("max_length", 2048)),
+        )
+        prompt_padded_length = int(inputs["input_ids"].shape[1])
+        inputs = {key: value.to(model_device) for key, value in inputs.items()}
+
+        def prefix_allowed_tokens_fn(batch_id, input_ids):
+            generated_ids = input_ids[prompt_padded_length:].tolist()
+            allowed = _lookup_allowed_tokens(trie, generated_ids, eos_token_id)
+            return allowed or ([eos_token_id] if eos_token_id is not None else [])
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_candidate_len + 1,
+                do_sample=False,
+                num_beams=num_beams,
+                num_return_sequences=num_return_sequences,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=eos_token_id,
+                early_stopping=True,
+            )
+
+        batch_size_actual = len(prompt_batch)
+        for row_index in range(batch_size_actual):
+            ranked: list[str] = []
+            seen = set()
+            start_index = row_index * num_return_sequences
+            end_index = start_index + num_return_sequences
+            for output_ids in outputs[start_index:end_index]:
+                generated_ids = output_ids[prompt_padded_length:].tolist()
+                token_key = _trim_after_eos(generated_ids, eos_token_id)
+                candidate = sequence_map.get(token_key)
+                if not candidate:
+                    candidate = tokenizer.decode(list(token_key), skip_special_tokens=True).strip()
+                if candidate and candidate not in seen:
+                    seen.add(candidate)
+                    ranked.append(candidate)
+            results.append(" ".join(ranked[:top_k_sequences]))
+
+    return results
+
+
 def load_generation_model(model_config_path: str | Path, checkpoint_path: str | Path | None = None):
     try:
         import torch
@@ -94,16 +217,30 @@ def generate_from_messages(
     model,
     message_batches: list[list[dict[str, str]]],
     batch_size: int = 1,
+    allowed_completions: list[str] | None = None,
+    top_k_sequences: int = 10,
 ) -> list[str]:
     import torch
-    from tqdm import tqdm
 
     generation_cfg = dict(model_cfg.get("generation", {}))
     do_sample = bool(generation_cfg.get("do_sample", False))
     max_new_tokens = int(generation_cfg.get("max_new_tokens", 200))
     prompts = render_chat_prompts(tokenizer, message_batches)
+    if allowed_completions is not None:
+        return _generate_constrained_topk(
+            model_cfg,
+            tokenizer,
+            model,
+            prompts,
+            batch_size=batch_size,
+            allowed_completions=allowed_completions,
+            top_k_sequences=top_k_sequences,
+        )
+
     results: list[str] = []
     model_device = next(model.parameters()).device
+
+    from tqdm import tqdm
 
     total_batches = (len(prompts) + batch_size - 1) // batch_size
     for start in tqdm(
@@ -119,7 +256,7 @@ def generate_from_messages(
             truncation=True,
             max_length=int(model_cfg.get("max_length", 2048)),
         )
-        input_lengths = inputs["attention_mask"].sum(dim=1)
+        prompt_padded_length = int(inputs["input_ids"].shape[1])
         inputs = {key: value.to(model_device) for key, value in inputs.items()}
 
         generate_kwargs = {
@@ -136,7 +273,7 @@ def generate_from_messages(
             outputs = model.generate(**inputs, **generate_kwargs)
 
         for row_index, output_ids in enumerate(outputs):
-            generated_ids = output_ids[int(input_lengths[row_index].item()) :]
+            generated_ids = output_ids[prompt_padded_length:]
             text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
             results.append(text)
     return results

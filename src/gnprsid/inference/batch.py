@@ -46,6 +46,15 @@ def _load_bank_map(bank_path: Path, repr_name: str) -> Dict[str, dict]:
     }
 
 
+def _load_candidate_space(bank_path: Path, repr_name: str) -> List[str]:
+    values = {
+        str(row["target"])
+        for row in iter_jsonl(bank_path)
+        if row["repr"] == repr_name
+    }
+    return sorted(values)
+
+
 def run_batch_inference(
     dataset: str,
     repr_name: str,
@@ -90,8 +99,9 @@ def run_batch_inference(
     if top_k_retrieval is None:
         top_k_retrieval = 3 if history_source == "hybrid" else 5
 
+    candidate_space = _load_candidate_space(retrieval_bank_path, repr_name)
     model_cfg, tokenizer, model, model_source = load_generation_model(model_config_path, checkpoint_path=checkpoint_path)
-    sys_prompt = system_prompt(repr_name, history_source)
+    sys_prompt = system_prompt(repr_name, history_source, candidate_count=1)
     prompts = []
     for sample in samples:
         user_prompt = build_prompt(
@@ -101,7 +111,7 @@ def run_batch_inference(
             similar_map=similar_map,
             bank_map=bank_map,
             top_k_retrieval=top_k_retrieval,
-            candidate_count=10,
+            candidate_count=1,
         )
         prompts.append(
             [
@@ -110,7 +120,15 @@ def run_batch_inference(
             ]
         )
 
-    predictions = generate_from_messages(model_cfg, tokenizer, model, prompts, batch_size=batch_size)
+    predictions = generate_from_messages(
+        model_cfg,
+        tokenizer,
+        model,
+        prompts,
+        batch_size=batch_size,
+        allowed_completions=candidate_space,
+        top_k_sequences=10,
+    )
     records = []
     for sample, message_pair, prediction in zip(samples, prompts, predictions):
         user_prompt = message_pair[1]["content"]
@@ -143,6 +161,8 @@ def run_batch_inference(
             "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
             "model_source": model_source,
             "top_k_retrieval": top_k_retrieval,
+            "decoding_mode": "candidate_constrained_beam_search",
+            "candidate_space_size": len(candidate_space),
             "num_samples": len(records),
         },
         "samples": records,

@@ -202,7 +202,7 @@ def build_supervised_prompt(
     )
 
 
-def system_prompt(repr_name: str, history_source: str) -> str:
+def system_prompt(repr_name: str, history_source: str, candidate_count: int = 10) -> str:
     history_hint = {
         "current": "You only have the current observed trajectory.",
         "original": "You must use the user's full historical record and the current observed trajectory.",
@@ -210,10 +210,11 @@ def system_prompt(repr_name: str, history_source: str) -> str:
         "hybrid": "You must use the user's full historical record, the retrieved similar cases, and the current observed trajectory.",
     }[history_source]
 
+    count_text = _target_count_text(candidate_count)
     base_rules = (
         "You are a POI recommendation assistant. "
         f"{history_hint} "
-        "Return one line only. Return exactly 10 candidates ordered by likelihood. "
+        f"Return one line only. Return {count_text} candidates ordered by likelihood. "
         "Separate candidates with a single space. Do not add explanations or duplicate candidates."
     )
     if repr_name == "id":

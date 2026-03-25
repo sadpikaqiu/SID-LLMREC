@@ -96,6 +96,7 @@ def generate_from_messages(
     batch_size: int = 1,
 ) -> list[str]:
     import torch
+    from tqdm import tqdm
 
     generation_cfg = dict(model_cfg.get("generation", {}))
     do_sample = bool(generation_cfg.get("do_sample", False))
@@ -104,7 +105,12 @@ def generate_from_messages(
     results: list[str] = []
     model_device = next(model.parameters()).device
 
-    for start in range(0, len(prompts), batch_size):
+    total_batches = (len(prompts) + batch_size - 1) // batch_size
+    for start in tqdm(
+        range(0, len(prompts), batch_size),
+        total=total_batches,
+        desc="Generating",
+    ):
         prompt_batch = prompts[start : start + batch_size]
         inputs = tokenizer(
             prompt_batch,

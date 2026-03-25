@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
+from gnprsid.common.io import read_json
 from gnprsid.common.profiles import load_model_profile
 from gnprsid.common.runtime import resolve_torch_dtype
 
@@ -55,13 +56,20 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
         except ImportError as error:
             raise ImportError("Loading PEFT adapters requires the 'peft' package.") from error
 
+        adapter_config = read_json(checkpoint_path / "adapter_config.json")
+        base_model_source = adapter_config.get("base_model_name_or_path") or model_cfg["base_model"]
+        tokenizer_source = (
+            checkpoint_path
+            if checkpoint_path.joinpath("tokenizer_config.json").exists()
+            else model_cfg.get("tokenizer_name", base_model_source)
+        )
         tokenizer = AutoTokenizer.from_pretrained(
-            model_cfg.get("tokenizer_name", model_cfg["base_model"]),
+            tokenizer_source,
             trust_remote_code=True,
         )
-        model = AutoModelForCausalLM.from_pretrained(model_cfg["base_model"], **model_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(base_model_source, **model_kwargs)
         model = PeftModel.from_pretrained(model, str(checkpoint_path))
-        model_source = str(checkpoint_path)
+        model_source = f"{base_model_source} + {checkpoint_path}"
     else:
         model_source = str(checkpoint_path) if checkpoint_path else str(model_cfg["base_model"])
         tokenizer = AutoTokenizer.from_pretrained(

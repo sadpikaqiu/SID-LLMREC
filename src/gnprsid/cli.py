@@ -102,6 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    display_result = None
 
     if args.command_group == "data":
         from gnprsid.data.legacy import import_legacy_dataset
@@ -194,10 +195,13 @@ def main() -> None:
 
         if args.eval_command == "run":
             result = run_evaluation(args.predictions, output_path=args.output_path)
+            display_result = result["metrics"]
         else:
             result = summarize_evaluations(args.dataset, eval_dir=args.eval_dir, output_path=args.output_path)
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if display_result is None:
+        display_result = result
+    print(json.dumps(display_result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

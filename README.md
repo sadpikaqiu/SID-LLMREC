@@ -18,6 +18,13 @@ Linux-first refactor of GNPR-SID built around the V2 pipeline:
 - `artifacts/`: SID, retrieval, and alignment artifacts
 - `checkpoints/`: training outputs
 - `outputs/`: predictions, metrics, and summaries
+- `docs/`: project documents
+
+## Chinese Guide
+
+Detailed Chinese documentation:
+
+- `docs/项目使用手册.zh-CN.md`
 
 ## Primary CLI
 

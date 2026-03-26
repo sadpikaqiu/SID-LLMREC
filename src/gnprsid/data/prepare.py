@@ -11,7 +11,10 @@ from gnprsid.data.samples import (
     load_history_map,
     load_sid_token_map,
 )
-from gnprsid.prompts.render import build_supervised_prompt
+from gnprsid.prompts.render import (
+    build_next_poi_instruction,
+    build_prompt_input_text,
+)
 
 
 logger = get_logger(__name__)
@@ -27,8 +30,8 @@ def _write_sft_jsonl(
     for row in rows:
         payload.append(
             {
-                "instruction": f"Predict the next POI for history source '{history_source}'.",
-                "input": build_supervised_prompt(row, history_source, history_map=history_map),
+                "instruction": build_next_poi_instruction(history_source),
+                "input": build_prompt_input_text(row, history_source, history_map=history_map),
                 "output": row["target"],
                 "sample_id": row["sample_id"],
             }

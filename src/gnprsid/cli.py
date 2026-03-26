@@ -34,6 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
     build_align.add_argument("--sid-map-path", default=None)
     build_align.add_argument("--valid-ratio", type=float, default=0.1)
     build_align.add_argument("--seed", type=int, default=42)
+    eval_align = align_sub.add_parser("evaluate")
+    eval_align.add_argument("--dataset", default="NYC")
+    eval_align.add_argument("--model-config", required=True)
+    eval_align.add_argument("--checkpoint-path", default=None)
+    eval_align.add_argument("--split", default="valid", choices=["train", "valid"])
+    eval_align.add_argument("--task", default="attributes_to_sid", choices=["attributes_to_sid", "sid_to_attributes"])
+    eval_align.add_argument("--data-path", default=None)
+    eval_align.add_argument("--batch-size", type=int, default=1)
+    eval_align.add_argument("--limit", type=int, default=None)
+    eval_align.add_argument("--output-path", default=None)
 
     train_parser = subparsers.add_parser("train")
     train_sub = train_parser.add_subparsers(dest="train_command", required=True)
@@ -121,14 +131,30 @@ def main() -> None:
         else:
             result = export_sid_from_config(args.config, checkpoint_path=args.checkpoint_path)
     elif args.command_group == "alignment":
-        from gnprsid.alignment.build_data import build_alignment_data
+        if args.alignment_command == "build-data":
+            from gnprsid.alignment.build_data import build_alignment_data
 
-        result = build_alignment_data(
-            args.dataset,
-            sid_map_path=args.sid_map_path,
-            valid_ratio=args.valid_ratio,
-            seed=args.seed,
-        )
+            result = build_alignment_data(
+                args.dataset,
+                sid_map_path=args.sid_map_path,
+                valid_ratio=args.valid_ratio,
+                seed=args.seed,
+            )
+        else:
+            from gnprsid.alignment.evaluate import evaluate_alignment
+
+            result = evaluate_alignment(
+                dataset=args.dataset,
+                model_config_path=args.model_config,
+                checkpoint_path=args.checkpoint_path,
+                split=args.split,
+                task=args.task,
+                data_path=args.data_path,
+                batch_size=args.batch_size,
+                limit=args.limit,
+                output_path=args.output_path,
+            )
+            display_result = result["metrics"]
     elif args.command_group == "train":
         if args.train_command == "run":
             from gnprsid.train.base import run_training_stage

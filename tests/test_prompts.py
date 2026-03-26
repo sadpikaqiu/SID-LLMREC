@@ -1,4 +1,9 @@
-from gnprsid.prompts.render import build_prompt, build_supervised_prompt, system_prompt
+from gnprsid.prompts.render import (
+    V2_NEXT_POI_INSTRUCTION,
+    build_prompt,
+    build_supervised_prompt,
+    system_prompt,
+)
 
 
 def sample(repr_name="id"):
@@ -26,21 +31,24 @@ def test_retrieval_prompt_has_explicit_sections():
         },
         top_k_retrieval=1,
     )
+    assert "### Instruction:" in prompt
+    assert "### Input:" in prompt
+    assert V2_NEXT_POI_INSTRUCTION in prompt
     assert "Retrieved similar cases:" in prompt
-    assert "Observed trajectory:" in prompt
-    assert "Ground-truth next POI" in prompt
-    assert "Current trajectory to predict:" in prompt
+    assert "Case 1:" in prompt
+    assert "Current trajectory to predict:" not in prompt
 
 
 def test_supervised_prompt_uses_single_target_requirement():
     prompt = build_supervised_prompt(sample("id"), "current")
-    assert "exactly 1" in prompt
-    assert "exactly 10" not in prompt
+    assert "### Instruction:" in prompt
+    assert "### Input:" in prompt
+    assert "Output format:" not in prompt
 
 
 def test_system_prompt_candidate_count_is_configurable():
     single = system_prompt("sid", "current", candidate_count=1)
     topk = system_prompt("sid", "current", candidate_count=10)
-    assert "exactly 1" in single
-    assert "exactly 10" not in single
-    assert "exactly 10" in topk
+    assert "helpful assistant" in single
+    assert "semantic IDs only" in single
+    assert single == topk

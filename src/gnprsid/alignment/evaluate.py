@@ -57,59 +57,6 @@ def _extract_attribute_field(text: str, label: str) -> str | None:
     return match.group(1).strip()
 
 
-def _generate_from_raw_prompts(
-    model_cfg: dict[str, Any],
-    tokenizer,
-    model,
-    prompts: list[str],
-    batch_size: int,
-) -> list[str]:
-    import torch
-    from tqdm import tqdm
-
-    generation_cfg = dict(model_cfg.get("generation", {}))
-    do_sample = bool(generation_cfg.get("do_sample", False))
-    max_new_tokens = int(generation_cfg.get("max_new_tokens", 200))
-    model_device = next(model.parameters()).device
-    results: list[str] = []
-
-    total_batches = (len(prompts) + batch_size - 1) // batch_size
-    for start in tqdm(
-        range(0, len(prompts), batch_size),
-        total=total_batches,
-        desc="Evaluating alignment",
-    ):
-        prompt_batch = prompts[start : start + batch_size]
-        inputs = tokenizer(
-            prompt_batch,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=int(model_cfg.get("max_length", 2048)),
-        )
-        prompt_padded_length = int(inputs["input_ids"].shape[1])
-        inputs = {key: value.to(model_device) for key, value in inputs.items()}
-
-        generate_kwargs = {
-            "max_new_tokens": max_new_tokens,
-            "do_sample": do_sample,
-            "pad_token_id": tokenizer.pad_token_id,
-            "eos_token_id": tokenizer.eos_token_id,
-        }
-        if do_sample:
-            generate_kwargs["temperature"] = float(generation_cfg.get("temperature", 0.7))
-            generate_kwargs["top_p"] = float(generation_cfg.get("top_p", 0.9))
-
-        with torch.no_grad():
-            outputs = model.generate(**inputs, **generate_kwargs)
-
-        for output_ids in outputs:
-            generated_ids = output_ids[prompt_padded_length:]
-            results.append(tokenizer.decode(generated_ids, skip_special_tokens=True).strip())
-
-    return results
-
-
 def _evaluate_attributes_to_sid(records: Iterable[dict[str, Any]], predictions: list[str]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     samples: list[dict[str, Any]] = []
     parsed = 0
@@ -200,7 +147,7 @@ def evaluate_alignment(
     limit: int | None = None,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    from gnprsid.inference.modeling import load_generation_model
+    from gnprsid.inference.modeling import generate_from_raw_prompts, load_generation_model
 
     paths = dataset_paths(dataset)
     if data_path is None:
@@ -228,7 +175,27 @@ def evaluate_alignment(
 
     prompts = [format_alignment_prompt(record) for record in records]
     model_cfg, tokenizer, model, model_source = load_generation_model(model_config_path, checkpoint_path=checkpoint_path)
-    predictions = _generate_from_raw_prompts(model_cfg, tokenizer, model, prompts, batch_size=batch_size)
+    if task == "attributes_to_sid":
+        candidate_space = sorted({str(record["output"]).strip() for record in records})
+        predictions = generate_from_raw_prompts(
+            model_cfg,
+            tokenizer,
+            model,
+            prompts,
+            batch_size=batch_size,
+            allowed_completions=candidate_space,
+            top_k_sequences=1,
+        )
+        decoding_mode = "candidate_constrained"
+    else:
+        predictions = generate_from_raw_prompts(
+            model_cfg,
+            tokenizer,
+            model,
+            prompts,
+            batch_size=batch_size,
+        )
+        decoding_mode = "free_generation"
 
     if task == "attributes_to_sid":
         metrics, samples = _evaluate_attributes_to_sid(records, predictions)
@@ -244,6 +211,7 @@ def evaluate_alignment(
             "model_config_path": str(model_config_path),
             "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
             "model_source": model_source,
+            "decoding_mode": decoding_mode,
             "num_samples": len(samples),
         },
         "metrics": metrics,

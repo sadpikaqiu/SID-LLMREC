@@ -232,11 +232,11 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
     return model_cfg, tokenizer, model, model_source
 
 
-def generate_from_messages(
+def generate_from_raw_prompts(
     model_cfg: dict,
     tokenizer,
     model,
-    message_batches: list[list[dict[str, str]]],
+    prompts: list[str],
     batch_size: int = 1,
     allowed_completions: list[str] | None = None,
     top_k_sequences: int = 10,
@@ -246,7 +246,6 @@ def generate_from_messages(
     generation_cfg = dict(model_cfg.get("generation", {}))
     do_sample = bool(generation_cfg.get("do_sample", False))
     max_new_tokens = int(generation_cfg.get("max_new_tokens", 200))
-    prompts = render_chat_prompts(tokenizer, message_batches)
     if allowed_completions is not None:
         return _generate_constrained_topk(
             model_cfg,
@@ -298,3 +297,24 @@ def generate_from_messages(
             text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
             results.append(text)
     return results
+
+
+def generate_from_messages(
+    model_cfg: dict,
+    tokenizer,
+    model,
+    message_batches: list[list[dict[str, str]]],
+    batch_size: int = 1,
+    allowed_completions: list[str] | None = None,
+    top_k_sequences: int = 10,
+) -> list[str]:
+    prompts = render_chat_prompts(tokenizer, message_batches)
+    return generate_from_raw_prompts(
+        model_cfg,
+        tokenizer,
+        model,
+        prompts,
+        batch_size=batch_size,
+        allowed_completions=allowed_completions,
+        top_k_sequences=top_k_sequences,
+    )

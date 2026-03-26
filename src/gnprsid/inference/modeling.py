@@ -78,6 +78,26 @@ def _trim_after_eos(token_ids: list[int], eos_token_id: int | None) -> tuple[int
     return tuple(token_ids)
 
 
+def _normalize_generation_config(model, generation_cfg: dict) -> None:
+    cfg = getattr(model, "generation_config", None)
+    if cfg is None:
+        return
+
+    do_sample = bool(generation_cfg.get("do_sample", False))
+    cfg.do_sample = do_sample
+    if do_sample:
+        if "temperature" in generation_cfg:
+            cfg.temperature = float(generation_cfg["temperature"])
+        if "top_p" in generation_cfg:
+            cfg.top_p = float(generation_cfg["top_p"])
+        if "top_k" in generation_cfg:
+            cfg.top_k = int(generation_cfg["top_k"])
+    else:
+        cfg.temperature = 1.0
+        cfg.top_p = 1.0
+        cfg.top_k = 50
+
+
 def _generate_constrained_topk(
     model_cfg: dict,
     tokenizer,
@@ -207,6 +227,7 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
+    _normalize_generation_config(model, dict(model_cfg.get("generation", {})))
     model.eval()
     return model_cfg, tokenizer, model, model_source
 

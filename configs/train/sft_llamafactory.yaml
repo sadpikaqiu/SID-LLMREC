@@ -2,7 +2,7 @@ stage: sft
 backend: llamafactory
 dataset: NYC
 model_profile: qwen2.5-7b-instruct
-base_model_override: checkpoints/NYC/alignment/qwen25_7b/merged
+base_model_override: checkpoints/NYC/alignment/qwen25_7b_phase_b/merged
 train_path: artifacts/NYC/llm/sid/current/train.jsonl
 valid_path: artifacts/NYC/llm/sid/current/val.jsonl
 output_dir: checkpoints/NYC/sft/qwen25_7b_sid_current

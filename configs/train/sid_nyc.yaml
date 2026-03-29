@@ -1,16 +1,16 @@
 dataset: NYC
 model_profile: qwen2.5-7b-instruct
 poi_info_path: data/NYC/processed/poi_info.csv
-category_model_name: all-MiniLM-L6-v2
+category_model_name: /home/sylteacher/models/all-MiniLM-L6-v2
 category_embedding_dim: 64
-region_model_name: all-MiniLM-L6-v2
+region_model_name: /home/sylteacher/models/all-MiniLM-L6-v2
 region_embedding_dim: 64
 poi_embedding_output_dir: artifacts/NYC/poi_embedding
 poi_embedding_path: artifacts/NYC/poi_embedding/poi_emb_dict.pkl
 sid_output_dir: artifacts/NYC/sid
 checkpoint_dir: checkpoints/NYC/sid
 train:
-  lr: 1.0e-3
+  lr: 0.001
   epochs: 3000
   batch_size: 128
   num_workers: 4
@@ -18,20 +18,29 @@ train:
   learner: AdamW
   lr_scheduler_type: constant
   warmup_epochs: 100
-  weight_decay: 1.0e-4
+  weight_decay: 0.0001
   dropout_prob: 0.1
   bn: true
   loss_type: mse
   kmeans_init: true
   kmeans_iters: 100
   use_sk: false
-  sk_epsilons: [0.1, 0.1, 0.1]
+  sk_epsilons:
+  - 0.1
+  - 0.1
+  - 0.1
   sk_iters: 50
   use_linear: 1
   device: cuda:0
-  num_emb_list: [64, 64, 64]
+  num_emb_list:
+  - 64
+  - 64
+  - 64
   e_dim: 64
   quant_loss_weight: 0.5
   beta: 0.25
-  layers: [512, 256, 128]
+  layers:
+  - 512
+  - 256
+  - 128
   save_limit: 5

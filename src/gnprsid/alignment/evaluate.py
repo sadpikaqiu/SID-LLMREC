@@ -1,17 +1,38 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable, List
+from typing import Any, Iterable
 
-from gnprsid.common.io import read_json, write_json
+from gnprsid.alignment.semantic import (
+    parse_profile_json,
+    profile_to_json,
+    validate_profile,
+)
+from gnprsid.common.io import iter_jsonl, write_json
 from gnprsid.common.logging import get_logger
 from gnprsid.common.paths import dataset_paths
-from gnprsid.prompts.render import SID_PATTERN
 
 
 logger = get_logger(__name__)
-_SID_REGEX = re.compile(SID_PATTERN)
+_PREFIX_PATTERNS = {
+    "a": re.compile(r"<[a-zA-Z]_\d+>"),
+    "ab": re.compile(r"(?:<[a-zA-Z]_\d+>){2}"),
+    "abc": re.compile(r"(?:<[a-zA-Z]_\d+>){3}"),
+}
+_TASK_TO_TYPE = {
+    "sid_to_abc_profile": ("phase_b", "full_sid_to_abc_profile"),
+    "abc_profile_to_a": ("phase_a", "category_profile_to_a"),
+    "abc_profile_to_ab": ("phase_a", "category_region_profile_to_ab"),
+    "abc_profile_to_abc": ("phase_b", "abc_profile_to_abc"),
+}
+_TASK_TO_LEVEL = {
+    "sid_to_abc_profile": "abc",
+    "abc_profile_to_a": "a",
+    "abc_profile_to_ab": "ab",
+    "abc_profile_to_abc": "abc",
+}
 
 
 def format_alignment_prompt(record: dict[str, Any]) -> str:
@@ -24,114 +45,152 @@ def format_alignment_prompt(record: dict[str, Any]) -> str:
     )
 
 
-def _normalize_text(text: str) -> str:
-    return " ".join(str(text).strip().split())
+def _default_data_path(dataset: str, split: str, task: str) -> Path:
+    paths = dataset_paths(dataset)
+    phase_name, _ = _TASK_TO_TYPE[task]
+    suffix = "train" if split == "train" else "valid"
+    return paths.artifacts / "alignment" / f"{suffix}_align_{phase_name}.jsonl"
 
 
-def _extract_sid(text: str) -> str | None:
-    match = _SID_REGEX.search(str(text))
+def _load_task_records(data_path: Path, task: str, limit: int | None) -> list[dict[str, Any]]:
+    _, task_type = _TASK_TO_TYPE[task]
+    records = [record for record in iter_jsonl(data_path) if record["task_type"] == task_type]
+    if limit is not None:
+        records = records[:limit]
+    return records
+
+
+def _extract_prefix(text: str, level: str) -> str | None:
+    match = _PREFIX_PATTERNS[level].search(str(text))
     return match.group(0) if match else None
 
 
-def _sid_segments(text: str) -> list[str]:
-    return re.findall(r"<[a-zA-Z]_\d+>", text)
-
-
-def _shared_prefix_length(pred_sid: str | None, target_sid: str) -> int:
-    if not pred_sid:
-        return 0
-    pred_segments = _sid_segments(pred_sid)
-    target_segments = _sid_segments(target_sid)
-    shared = 0
-    for pred_part, target_part in zip(pred_segments, target_segments):
-        if pred_part != target_part:
-            break
-        shared += 1
-    return shared
-
-
-def _extract_attribute_field(text: str, label: str) -> str | None:
-    match = re.search(rf"{re.escape(label)}:\s*([^;}}]+)", str(text))
-    if not match:
-        return None
-    return match.group(1).strip()
-
-
-def _evaluate_attributes_to_sid(records: Iterable[dict[str, Any]], predictions: list[str]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    samples: list[dict[str, Any]] = []
-    parsed = 0
-    exact = 0
-    prefix_1 = 0
-    prefix_2 = 0
-    prefix_3 = 0
-
+def _evaluate_sid_to_abc_profile(
+    records: Iterable[dict[str, Any]],
+    predictions: list[str],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     materialized_records = list(records)
+    samples: list[dict[str, Any]] = []
+    valid_profile = 0
+    category_match = 0
+    region_match = 0
+    geo_bucket_match = 0
+    joint_match = 0
+    predicted_categories: Counter[str] = Counter()
+    predicted_regions: Counter[str] = Counter()
+    predicted_profiles: Counter[str] = Counter()
+
     for record, prediction in zip(materialized_records, predictions):
-        target_sid = str(record["output"]).strip()
-        parsed_sid = _extract_sid(prediction)
-        shared_prefix = _shared_prefix_length(parsed_sid, target_sid)
-        parsed += int(parsed_sid is not None)
-        exact += int(parsed_sid == target_sid)
-        prefix_1 += int(shared_prefix >= 1)
-        prefix_2 += int(shared_prefix >= 2)
-        prefix_3 += int(shared_prefix >= 3)
+        target_profile = parse_profile_json(str(record["output"]))
+        predicted_profile = parse_profile_json(prediction)
+        is_valid = validate_profile(predicted_profile, "abc")
+        valid_profile += int(is_valid)
+        if is_valid and predicted_profile is not None:
+            predicted_category = str(predicted_profile["category"])
+            predicted_region = str(predicted_profile["region"])
+            predicted_profile_json = profile_to_json(predicted_profile, level="abc")
+            predicted_categories[predicted_category] += 1
+            predicted_regions[predicted_region] += 1
+            predicted_profiles[predicted_profile_json] += 1
+        else:
+            predicted_profile_json = None
+
+        category_ok = bool(
+            is_valid
+            and target_profile is not None
+            and str(predicted_profile["category"]) == str(target_profile["category"])
+        )
+        region_ok = bool(
+            is_valid
+            and target_profile is not None
+            and str(predicted_profile["region"]) == str(target_profile["region"])
+        )
+        geo_ok = bool(
+            is_valid
+            and target_profile is not None
+            and str(predicted_profile["geo_bucket"]) == str(target_profile["geo_bucket"])
+        )
+        joint_ok = bool(category_ok and region_ok and geo_ok)
+        category_match += int(category_ok)
+        region_match += int(region_ok)
+        geo_bucket_match += int(geo_ok)
+        joint_match += int(joint_ok)
+
         samples.append(
             {
-                "instruction": record["instruction"],
-                "input": record["input"],
-                "target": target_sid,
+                "sample_id": record["sample_id"],
+                "task_type": record["task_type"],
+                "source_sid": record["source_sid"],
+                "source_abc": record["source_abc"],
+                "target": record["output"],
                 "prediction": prediction,
-                "parsed_sid": parsed_sid,
-                "shared_prefix_length": shared_prefix,
-                "is_exact_match": parsed_sid == target_sid,
+                "parsed_profile": predicted_profile,
+                "parsed_profile_json": predicted_profile_json,
+                "valid_profile": is_valid,
+                "category_match": category_ok,
+                "region_match": region_ok,
+                "geo_bucket_match": geo_ok,
+                "joint_profile_match": joint_ok,
             }
         )
 
     total = len(materialized_records)
     metrics = {
         "num_samples": total,
-        "parsed_sid_rate": parsed / total if total else 0.0,
-        "exact_match_rate": exact / total if total else 0.0,
-        "prefix_match_at_1": prefix_1 / total if total else 0.0,
-        "prefix_match_at_2": prefix_2 / total if total else 0.0,
-        "prefix_match_at_3": prefix_3 / total if total else 0.0,
+        "valid_profile_rate": valid_profile / total if total else 0.0,
+        "category_match_rate": category_match / total if total else 0.0,
+        "region_match_rate": region_match / total if total else 0.0,
+        "geo_bucket_match_rate": geo_bucket_match / total if total else 0.0,
+        "joint_profile_match_rate": joint_match / total if total else 0.0,
+        "dominant_category_share": (
+            max(predicted_categories.values()) / total if total and predicted_categories else 0.0
+        ),
+        "dominant_region_share": (
+            max(predicted_regions.values()) / total if total and predicted_regions else 0.0
+        ),
+        "unique_predicted_profiles": len(predicted_profiles),
     }
     return metrics, samples
 
 
-def _evaluate_sid_to_attributes(records: Iterable[dict[str, Any]], predictions: list[str]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    samples: list[dict[str, Any]] = []
-    exact = 0
-    category = 0
-    region = 0
-
+def _evaluate_profile_to_prefix(
+    task: str,
+    records: Iterable[dict[str, Any]],
+    predictions: list[str],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    level = _TASK_TO_LEVEL[task]
     materialized_records = list(records)
+    samples: list[dict[str, Any]] = []
+    valid_prefix = 0
+    exact = 0
+
     for record, prediction in zip(materialized_records, predictions):
-        target_text = _normalize_text(str(record["output"]))
-        pred_text = _normalize_text(prediction)
-        target_category = _extract_attribute_field(target_text, "Category")
-        target_region = _extract_attribute_field(target_text, "Region")
-        exact += int(pred_text == target_text)
-        category += int(target_category is not None and target_category in pred_text)
-        region += int(target_region is not None and f"Region: {target_region}" in pred_text)
+        parsed_prefix = _extract_prefix(prediction, level)
+        candidates = list(record.get("candidate_prefixes", []))
+        valid = bool(parsed_prefix is not None and parsed_prefix in candidates)
+        is_exact = bool(parsed_prefix == str(record["output"]).strip())
+        valid_prefix += int(valid)
+        exact += int(is_exact)
         samples.append(
             {
-                "instruction": record["instruction"],
-                "input": record["input"],
+                "sample_id": record["sample_id"],
+                "task_type": record["task_type"],
+                "source_sid": record["source_sid"],
+                "source_abc": record["source_abc"],
                 "target": record["output"],
+                "candidate_prefixes": candidates,
                 "prediction": prediction,
-                "is_exact_match": pred_text == target_text,
-                "category_match": target_category is not None and target_category in pred_text,
-                "region_match": target_region is not None and f"Region: {target_region}" in pred_text,
+                "parsed_prefix": parsed_prefix,
+                "valid_prefix": valid,
+                "is_exact_match": is_exact,
             }
         )
 
     total = len(materialized_records)
     metrics = {
         "num_samples": total,
+        "valid_prefix_rate": valid_prefix / total if total else 0.0,
         "exact_match_rate": exact / total if total else 0.0,
-        "category_match_rate": category / total if total else 0.0,
-        "region_match_rate": region / total if total else 0.0,
     }
     return metrics, samples
 
@@ -141,7 +200,7 @@ def evaluate_alignment(
     model_config_path: str | Path,
     checkpoint_path: str | Path | None = None,
     split: str = "valid",
-    task: str = "attributes_to_sid",
+    task: str = "sid_to_abc_profile",
     data_path: str | Path | None = None,
     batch_size: int = 1,
     limit: int | None = None,
@@ -149,12 +208,13 @@ def evaluate_alignment(
 ) -> dict[str, Any]:
     from gnprsid.inference.modeling import generate_from_raw_prompts, load_generation_model
 
+    if task not in _TASK_TO_TYPE:
+        raise ValueError(f"Unsupported alignment evaluation task: {task}")
+
     paths = dataset_paths(dataset)
-    if data_path is None:
-        split_name = "valid" if split == "valid" else "train"
-        data_path = paths.artifacts / "alignment" / f"{split_name}_align.json"
-    else:
-        data_path = Path(data_path)
+    data_path = Path(data_path) if data_path else _default_data_path(dataset, split, task)
+    if not data_path.exists():
+        raise FileNotFoundError(f"Missing alignment evaluation data: {data_path}")
 
     if output_path is None:
         output_path = paths.outputs / "eval" / f"alignment_{task}_{split}.json"
@@ -162,20 +222,11 @@ def evaluate_alignment(
         output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    records = read_json(data_path)
-    if task == "attributes_to_sid":
-        records = [record for record in records if _extract_sid(str(record["output"])) is not None]
-    elif task == "sid_to_attributes":
-        records = [record for record in records if _extract_sid(str(record["output"])) is None]
-    else:
-        raise ValueError(f"Unsupported alignment evaluation task: {task}")
-
-    if limit is not None:
-        records = records[:limit]
-
+    records = _load_task_records(data_path, task, limit=limit)
     prompts = [format_alignment_prompt(record) for record in records]
     model_cfg, tokenizer, model, model_source = load_generation_model(model_config_path, checkpoint_path=checkpoint_path)
-    if task == "attributes_to_sid":
+
+    if task == "sid_to_abc_profile":
         candidate_space = sorted({str(record["output"]).strip() for record in records})
         predictions = generate_from_raw_prompts(
             model_cfg,
@@ -186,21 +237,26 @@ def evaluate_alignment(
             allowed_completions=candidate_space,
             top_k_sequences=1,
         )
-        decoding_mode = "candidate_constrained"
+        decoding_mode = "candidate_constrained_global"
     else:
-        predictions = generate_from_raw_prompts(
-            model_cfg,
-            tokenizer,
-            model,
-            prompts,
-            batch_size=batch_size,
-        )
-        decoding_mode = "free_generation"
+        predictions = []
+        for prompt, record in zip(prompts, records):
+            prediction = generate_from_raw_prompts(
+                model_cfg,
+                tokenizer,
+                model,
+                [prompt],
+                batch_size=1,
+                allowed_completions=list(record["candidate_prefixes"]),
+                top_k_sequences=1,
+            )[0]
+            predictions.append(prediction)
+        decoding_mode = "candidate_constrained_per_sample"
 
-    if task == "attributes_to_sid":
-        metrics, samples = _evaluate_attributes_to_sid(records, predictions)
+    if task == "sid_to_abc_profile":
+        metrics, samples = _evaluate_sid_to_abc_profile(records, predictions)
     else:
-        metrics, samples = _evaluate_sid_to_attributes(records, predictions)
+        metrics, samples = _evaluate_profile_to_prefix(task, records, predictions)
 
     payload = {
         "metadata": {

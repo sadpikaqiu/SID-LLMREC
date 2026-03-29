@@ -34,12 +34,19 @@ def build_parser() -> argparse.ArgumentParser:
     build_align.add_argument("--sid-map-path", default=None)
     build_align.add_argument("--valid-ratio", type=float, default=0.1)
     build_align.add_argument("--seed", type=int, default=42)
+    build_align.add_argument("--semantic-schema", default="semantic_spatial_v2")
+    build_align.add_argument("--grid-size", type=int, default=8)
+    build_align.add_argument("--split-by", default="abc")
     eval_align = align_sub.add_parser("evaluate")
     eval_align.add_argument("--dataset", default="NYC")
     eval_align.add_argument("--model-config", required=True)
     eval_align.add_argument("--checkpoint-path", default=None)
     eval_align.add_argument("--split", default="valid", choices=["train", "valid"])
-    eval_align.add_argument("--task", default="attributes_to_sid", choices=["attributes_to_sid", "sid_to_attributes"])
+    eval_align.add_argument(
+        "--task",
+        default="sid_to_abc_profile",
+        choices=["sid_to_abc_profile", "abc_profile_to_a", "abc_profile_to_ab", "abc_profile_to_abc"],
+    )
     eval_align.add_argument("--data-path", default=None)
     eval_align.add_argument("--batch-size", type=int, default=1)
     eval_align.add_argument("--limit", type=int, default=None)
@@ -139,6 +146,9 @@ def main() -> None:
                 sid_map_path=args.sid_map_path,
                 valid_ratio=args.valid_ratio,
                 seed=args.seed,
+                semantic_schema=args.semantic_schema,
+                grid_size=args.grid_size,
+                split_by=args.split_by,
             )
         else:
             from gnprsid.alignment.evaluate import evaluate_alignment

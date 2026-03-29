@@ -92,6 +92,16 @@ def _build_context(config_path: str | Path, stage_override: str | None = None) -
     )
 
 
+def _resolve_model_source(source: str | Path) -> str:
+    source_path = Path(str(source))
+    if source_path.is_absolute():
+        return str(source_path)
+    project_candidate = resolve_project_path(source_path)
+    if project_candidate.exists():
+        return str(project_candidate)
+    return str(source)
+
+
 @register_backend
 class AlignmentTRLBackend(TrainingBackend):
     stage = "alignment"
@@ -124,14 +134,16 @@ class AlignmentTRLBackend(TrainingBackend):
 
         device_type = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = resolve_torch_dtype(torch, str(cfg.get("dtype", model_cfg.get("dtype", "auto"))), device_type)
+        base_model_source = _resolve_model_source(cfg.get("base_model_override", model_cfg["base_model"]))
+        tokenizer_source = _resolve_model_source(cfg.get("tokenizer_override", model_cfg.get("tokenizer_name", base_model_source)))
         model = AutoModelForCausalLM.from_pretrained(
-            model_cfg["base_model"],
+            base_model_source,
             trust_remote_code=True,
             dtype=dtype,
         )
         model.gradient_checkpointing_enable()
 
-        tokenizer = AutoTokenizer.from_pretrained(model_cfg.get("tokenizer_name", model_cfg["base_model"]), trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
@@ -205,6 +217,7 @@ class AlignmentTRLBackend(TrainingBackend):
         trainer.save_model(str(final_dir))
         tokenizer.save_pretrained(str(final_dir))
         return {
+            "base_model_source": base_model_source,
             "train_path": train_path,
             "valid_path": valid_path,
             "final_checkpoint_dir": str(final_dir),

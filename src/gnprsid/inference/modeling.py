@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterable
 
 from gnprsid.common.io import read_json
-from gnprsid.common.profiles import load_model_profile
+from gnprsid.common.profiles import load_model_profile, resolve_project_path
 from gnprsid.common.runtime import resolve_torch_dtype
 
 
@@ -15,6 +15,16 @@ def _build_fallback_chat_prompt(messages: list[dict[str, str]]) -> str:
         chunks.append(f"[{role}]\n{message['content']}")
     chunks.append("[ASSISTANT]\n")
     return "\n\n".join(chunks)
+
+
+def _resolve_model_source(source: str | Path) -> str:
+    source_path = Path(str(source))
+    if source_path.is_absolute():
+        return str(source_path)
+    project_candidate = resolve_project_path(source_path)
+    if project_candidate.exists():
+        return str(project_candidate)
+    return str(source)
 
 
 def render_chat_prompts(tokenizer, message_batches: list[list[dict[str, str]]]) -> list[str]:
@@ -182,7 +192,7 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
         raise ImportError("Local inference requires torch and transformers.") from error
 
     model_cfg = load_model_profile(model_config_path)
-    checkpoint_path = Path(checkpoint_path) if checkpoint_path else None
+    checkpoint_path = resolve_project_path(checkpoint_path) if checkpoint_path else None
     device_type = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = resolve_torch_dtype(torch, str(model_cfg.get("dtype", "auto")), device_type)
     device_map = model_cfg.get("device_map")
@@ -200,11 +210,13 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
             raise ImportError("Loading PEFT adapters requires the 'peft' package.") from error
 
         adapter_config = read_json(checkpoint_path / "adapter_config.json")
-        base_model_source = adapter_config.get("base_model_name_or_path") or model_cfg["base_model"]
+        base_model_source = _resolve_model_source(
+            adapter_config.get("base_model_name_or_path") or model_cfg["base_model"]
+        )
         tokenizer_source = (
             checkpoint_path
             if checkpoint_path.joinpath("tokenizer_config.json").exists()
-            else model_cfg.get("tokenizer_name", base_model_source)
+            else _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
         )
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_source,
@@ -214,13 +226,15 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
         model = PeftModel.from_pretrained(model, str(checkpoint_path))
         model_source = f"{base_model_source} + {checkpoint_path}"
     else:
-        model_source = str(checkpoint_path) if checkpoint_path else str(model_cfg["base_model"])
+        base_model_source = _resolve_model_source(model_cfg["base_model"])
+        tokenizer_source = _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
+        model_source = str(checkpoint_path) if checkpoint_path else base_model_source
         tokenizer = AutoTokenizer.from_pretrained(
-            checkpoint_path if checkpoint_path else model_cfg.get("tokenizer_name", model_cfg["base_model"]),
+            str(checkpoint_path) if checkpoint_path else tokenizer_source,
             trust_remote_code=True,
         )
         model = AutoModelForCausalLM.from_pretrained(
-            checkpoint_path if checkpoint_path else model_cfg["base_model"],
+            str(checkpoint_path) if checkpoint_path else base_model_source,
             **model_kwargs,
         )
 

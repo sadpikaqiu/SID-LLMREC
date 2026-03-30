@@ -5,7 +5,7 @@ import math
 import random
 import re
 from collections import Counter
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 
 SEMANTIC_SCHEMA_NAME = "semantic_spatial_v2"
@@ -94,6 +94,13 @@ def compute_geo_bucket(
     return f"G{row}_{col}"
 
 
+def parse_geo_bucket(value: str) -> tuple[int, int]:
+    match = re.fullmatch(r"G(\d+)_(\d+)", str(value))
+    if not match:
+        raise ValueError(f"Invalid geo bucket: {value!r}")
+    return int(match.group(1)), int(match.group(2))
+
+
 def profile_for_level(
     level: str,
     category: str,
@@ -180,6 +187,22 @@ def candidate_sampling_weight(
     return 1.0 / math.sqrt(category_count * region_count)
 
 
+def forward_profile_sampling_weight(
+    category: str,
+    region: int | str | None,
+    geo_bucket: str | None,
+    category_counts: Counter,
+    region_counts: Counter,
+    geo_bucket_counts: Counter,
+) -> float:
+    category_count = max(1, int(category_counts[category]))
+    region_count = max(1, int(region_counts[region])) if region is not None else 1
+    geo_count = max(1, int(geo_bucket_counts[geo_bucket])) if geo_bucket is not None else 1
+    weight = 1.0 / (region_count * math.sqrt(category_count))
+    weight *= 1.0 / math.sqrt(geo_count)
+    return min(weight, 1.0)
+
+
 def deterministic_sample(
     items: Sequence[Any],
     sample_size: int,
@@ -210,3 +233,106 @@ def choose_negative_prefixes(
         return sorted(candidates)
     return sorted(rng.sample(candidates, negative_count))
 
+
+def choose_hard_negative_prefixes(
+    *,
+    level: str,
+    positive_prefix: str,
+    positive_profile: Mapping[str, Any],
+    prefix_profiles: Mapping[str, Mapping[str, Any]],
+    negative_count: int,
+    rng: random.Random,
+) -> list[str]:
+    if level not in PROFILE_FIELDS_BY_LEVEL:
+        raise ValueError(f"Unsupported prefix level for negatives: {level}")
+
+    def _geo_distance(left: str | None, right: str | None) -> float:
+        if left is None or right is None:
+            return float("inf")
+        left_row, left_col = parse_geo_bucket(left)
+        right_row, right_col = parse_geo_bucket(right)
+        return abs(left_row - right_row) + abs(left_col - right_col)
+
+    positive_category = positive_profile["category"]
+    positive_region = positive_profile.get("region")
+    positive_geo = positive_profile.get("geo_bucket")
+
+    candidates = []
+    for prefix, meta in prefix_profiles.items():
+        if prefix == positive_prefix:
+            continue
+        profile = meta["profile"]
+        same_category = str(profile["category"]) == str(positive_category)
+        same_region = str(profile.get("region")) == str(positive_region)
+        same_geo = str(profile.get("geo_bucket")) == str(positive_geo)
+        geo_distance = _geo_distance(profile.get("geo_bucket"), positive_geo)
+        candidates.append(
+            {
+                "prefix": prefix,
+                "profile": profile,
+                "same_category": same_category,
+                "same_region": same_region,
+                "same_geo": same_geo,
+                "geo_distance": geo_distance,
+            }
+        )
+
+    picked: list[str] = []
+
+    def _take(pool: list[dict[str, Any]], *, key) -> None:
+        if not pool or len(picked) >= negative_count:
+            return
+        ordered = sorted(pool, key=key)
+        for item in ordered:
+            prefix = str(item["prefix"])
+            if prefix not in picked:
+                picked.append(prefix)
+                return
+
+    if level == "a":
+        pool = [item for item in candidates if not item["same_category"]]
+        _take(pool, key=lambda item: (str(item["profile"]["category"]), str(item["prefix"])))
+    elif level == "ab":
+        same_category_diff_region = [
+            item for item in candidates if item["same_category"] and not item["same_region"]
+        ]
+        diff_category_same_region = [
+            item for item in candidates if not item["same_category"] and item["same_region"]
+        ]
+        _take(
+            same_category_diff_region,
+            key=lambda item: (str(item["profile"].get("region")), str(item["prefix"])),
+        )
+        _take(
+            diff_category_same_region,
+            key=lambda item: (str(item["profile"]["category"]), str(item["prefix"])),
+        )
+    else:
+        same_category_diff_region = [
+            item for item in candidates if item["same_category"] and not item["same_region"]
+        ]
+        same_category_region_diff_geo = [
+            item
+            for item in candidates
+            if item["same_category"] and item["same_region"] and not item["same_geo"]
+        ]
+        diff_category_close_geo = [
+            item for item in candidates if not item["same_category"] and item["geo_distance"] < float("inf")
+        ]
+        _take(
+            same_category_diff_region,
+            key=lambda item: (item["geo_distance"], str(item["profile"].get("region")), str(item["prefix"])),
+        )
+        _take(
+            same_category_region_diff_geo,
+            key=lambda item: (item["geo_distance"], str(item["prefix"])),
+        )
+        _take(
+            diff_category_close_geo,
+            key=lambda item: (item["geo_distance"], str(item["profile"]["category"]), str(item["prefix"])),
+        )
+
+    remaining = [str(item["prefix"]) for item in candidates if str(item["prefix"]) not in picked]
+    rng.shuffle(remaining)
+    picked.extend(remaining[: max(0, negative_count - len(picked))])
+    return sorted(picked[:negative_count])

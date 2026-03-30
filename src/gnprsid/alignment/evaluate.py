@@ -22,10 +22,10 @@ _PREFIX_PATTERNS = {
     "abc": re.compile(r"(?:<[a-zA-Z]_\d+>){3}"),
 }
 _TASK_TO_TYPE = {
-    "sid_to_abc_profile": ("phase_b", "full_sid_to_abc_profile"),
+    "sid_to_abc_profile": ("phase_b2", "full_sid_to_abc_profile"),
     "abc_profile_to_a": ("phase_a", "category_profile_to_a"),
     "abc_profile_to_ab": ("phase_a", "category_region_profile_to_ab"),
-    "abc_profile_to_abc": ("phase_b", "abc_profile_to_abc"),
+    "abc_profile_to_abc": ("phase_b2", "abc_profile_to_abc"),
 }
 _TASK_TO_LEVEL = {
     "sid_to_abc_profile": "abc",

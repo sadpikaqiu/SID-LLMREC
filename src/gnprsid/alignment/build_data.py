@@ -13,10 +13,10 @@ from gnprsid.alignment.semantic import (
     PROFILE_FIELDS_BY_LEVEL,
     SEMANTIC_SCHEMA_NAME,
     SUPPORTED_PREFIX_LEVELS,
-    candidate_sampling_weight,
-    choose_negative_prefixes,
+    choose_hard_negative_prefixes,
     compute_geo_bucket,
     deterministic_sample,
+    forward_profile_sampling_weight,
     mode_with_global_tie_break,
     normalize_category,
     normalize_region,
@@ -31,11 +31,15 @@ from gnprsid.common.paths import dataset_paths
 
 logger = get_logger(__name__)
 NEGATIVE_CANDIDATE_COUNT = 3
-PHASE_B_TASK_MIX = {
-    "full_sid_to_abc_profile": 0.30,
+PHASE_B1_TASK_MIX = {
+    "full_sid_to_abc_profile": 0.75,
+    "abc_to_abc_profile": 0.25,
+}
+PHASE_B2_TASK_MIX = {
+    "full_sid_to_abc_profile": 0.50,
     "abc_to_abc_profile": 0.20,
     "abc_profile_to_abc": 0.20,
-    "phase_a_replay": 0.30,
+    "phase_a_replay": 0.10,
 }
 
 
@@ -111,9 +115,10 @@ def _load_semantic_rows(
 
 def _build_prefix_prototypes(
     rows: list[dict[str, Any]],
-) -> tuple[dict[str, dict[str, dict[str, Any]]], Counter, Counter]:
+) -> tuple[dict[str, dict[str, dict[str, Any]]], Counter, Counter, Counter]:
     category_counts = Counter(row["category"] for row in rows)
     region_counts = Counter(row["region"] for row in rows)
+    geo_bucket_counts = Counter(row["geo_bucket"] for row in rows)
     grouped: dict[str, dict[str, list[dict[str, Any]]]] = {
         "a": defaultdict(list),
         "ab": defaultdict(list),
@@ -148,7 +153,7 @@ def _build_prefix_prototypes(
                 "profile_json": profile_to_json(profile, level=level),
                 "member_count": len(members),
             }
-    return prototypes, category_counts, region_counts
+    return prototypes, category_counts, region_counts, geo_bucket_counts
 
 
 def _build_purity_report(
@@ -249,11 +254,6 @@ def _build_phase_a_records(
     prefix_profiles: dict[str, dict[str, dict[str, Any]]],
     rng: random.Random,
 ) -> list[dict[str, Any]]:
-    all_a_prefixes = sorted(prefix_profiles["a"])
-    all_ab_prefixes = sorted(prefix_profiles["ab"])
-    a_profile_map = {prefix: meta["profile_json"] for prefix, meta in prefix_profiles["a"].items()}
-    ab_profile_map = {prefix: meta["profile_json"] for prefix, meta in prefix_profiles["ab"].items()}
-
     records: list[dict[str, Any]] = []
     for abc_prefix in sorted(abc_prefixes):
         a_prefix = sid_prefix(abc_prefix, "a")
@@ -277,11 +277,11 @@ def _build_phase_a_records(
             )
         )
 
-        a_negatives = choose_negative_prefixes(
-            all_a_prefixes,
+        a_negatives = choose_hard_negative_prefixes(
+            level="a",
             positive_prefix=a_prefix,
-            incompatible_profiles={a_meta["profile_json"]},
-            prefix_profile_map=a_profile_map,
+            positive_profile=a_meta["profile"],
+            prefix_profiles=prefix_profiles["a"],
             negative_count=NEGATIVE_CANDIDATE_COUNT,
             rng=rng,
         )
@@ -324,11 +324,11 @@ def _build_phase_a_records(
             )
         )
 
-        ab_negatives = choose_negative_prefixes(
-            all_ab_prefixes,
+        ab_negatives = choose_hard_negative_prefixes(
+            level="ab",
             positive_prefix=ab_prefix,
-            incompatible_profiles={ab_meta["profile_json"]},
-            prefix_profile_map=ab_profile_map,
+            positive_profile=ab_meta["profile"],
+            prefix_profiles=prefix_profiles["ab"],
             negative_count=NEGATIVE_CANDIDATE_COUNT,
             rng=rng,
         )
@@ -363,9 +363,6 @@ def _build_phase_b_records(
     prefix_profiles: dict[str, dict[str, dict[str, Any]]],
     rng: random.Random,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    all_abc_prefixes = sorted(prefix_profiles["abc"])
-    abc_profile_map = {prefix: meta["profile_json"] for prefix, meta in prefix_profiles["abc"].items()}
-
     abc_records: list[dict[str, Any]] = []
     reverse_records: list[dict[str, Any]] = []
     full_sid_records: list[dict[str, Any]] = []
@@ -388,11 +385,11 @@ def _build_phase_b_records(
             )
         )
 
-        abc_negatives = choose_negative_prefixes(
-            all_abc_prefixes,
+        abc_negatives = choose_hard_negative_prefixes(
+            level="abc",
             positive_prefix=abc_prefix,
-            incompatible_profiles={abc_meta["profile_json"]},
-            prefix_profile_map=abc_profile_map,
+            positive_profile=abc_meta["profile"],
+            prefix_profiles=prefix_profiles["abc"],
             negative_count=NEGATIVE_CANDIDATE_COUNT,
             rng=rng,
         )
@@ -468,28 +465,50 @@ def _task_counts(records: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _phase_b_train_records(
-    phase_a_train: list[dict[str, Any]],
-    abc_train: list[dict[str, Any]],
-    reverse_train: list[dict[str, Any]],
-    full_sid_train: list[dict[str, Any]],
+def _sample_task_family(
+    records: list[dict[str, Any]],
+    desired_count: int,
+    rng: random.Random,
+    *,
     category_counts: Counter,
     region_counts: Counter,
+    geo_bucket_counts: Counter,
+    use_forward_weights: bool,
+) -> list[dict[str, Any]]:
+    if not records or desired_count <= 0:
+        return []
+    weights = None
+    if use_forward_weights:
+        weights = [
+            forward_profile_sampling_weight(
+                str(record["category"]),
+                record.get("region"),
+                record.get("geo_bucket"),
+                category_counts,
+                region_counts,
+                geo_bucket_counts,
+            )
+            for record in records
+        ]
+    return deterministic_sample(records, desired_count, rng=rng, weights=weights)
+
+
+def _mixed_phase_train_records(
+    *,
+    families: dict[str, list[dict[str, Any]]],
+    task_mix: dict[str, float],
+    category_counts: Counter,
+    region_counts: Counter,
+    geo_bucket_counts: Counter,
     seed: int,
 ) -> list[dict[str, Any]]:
     rng = random.Random(seed)
-    families = {
-        "full_sid_to_abc_profile": full_sid_train,
-        "abc_to_abc_profile": abc_train,
-        "abc_profile_to_abc": reverse_train,
-        "phase_a_replay": phase_a_train,
-    }
     total_target = sum(len(records) for records in families.values())
     desired_counts: dict[str, int] = {}
     assigned = 0
-    family_names = list(PHASE_B_TASK_MIX.keys())
+    family_names = list(task_mix.keys())
     for index, family_name in enumerate(family_names):
-        ratio = PHASE_B_TASK_MIX[family_name]
+        ratio = task_mix[family_name]
         if index == len(family_names) - 1:
             count = total_target - assigned
         else:
@@ -499,26 +518,15 @@ def _phase_b_train_records(
 
     phase_b_records: list[dict[str, Any]] = []
     for family_name, records in families.items():
-        if not records:
-            continue
-        if family_name in {"full_sid_to_abc_profile", "abc_to_abc_profile"}:
-            weights = [
-                candidate_sampling_weight(
-                    str(record["category"]),
-                    record["region"],
-                    category_counts,
-                    region_counts,
-                )
-                for record in records
-            ]
-        else:
-            weights = None
         phase_b_records.extend(
-            deterministic_sample(
+            _sample_task_family(
                 records,
                 desired_counts[family_name],
-                rng=rng,
-                weights=weights,
+                rng,
+                category_counts=category_counts,
+                region_counts=region_counts,
+                geo_bucket_counts=geo_bucket_counts,
+                use_forward_weights=family_name in {"full_sid_to_abc_profile", "abc_to_abc_profile"},
             )
         )
     rng.shuffle(phase_b_records)
@@ -548,7 +556,7 @@ def build_alignment_data(
         raise FileNotFoundError(f"Missing SID mapping: {sid_map_path}")
 
     semantic_rows, bounds = _load_semantic_rows(poi_info_path, sid_map_path, grid_size=grid_size)
-    prefix_profiles, category_counts, region_counts = _build_prefix_prototypes(semantic_rows)
+    prefix_profiles, category_counts, region_counts, geo_bucket_counts = _build_prefix_prototypes(semantic_rows)
     purity_report = _build_purity_report(semantic_rows, bounds=bounds, grid_size=grid_size)
 
     output_dir = ensure_dir(paths.artifacts / "alignment")
@@ -580,16 +588,35 @@ def build_alignment_data(
     full_sid_train = [record for record in full_sid_records if record["source_abc"] in train_abc]
     full_sid_valid = [record for record in full_sid_records if record["source_abc"] in valid_abc]
 
-    phase_b_train = _phase_b_train_records(
-        phase_a_train=phase_a_train,
-        abc_train=abc_train,
-        reverse_train=reverse_train,
-        full_sid_train=full_sid_train,
+    phase_b1_train = _mixed_phase_train_records(
+        families={
+            "full_sid_to_abc_profile": full_sid_train,
+            "abc_to_abc_profile": abc_train,
+        },
+        task_mix=PHASE_B1_TASK_MIX,
         category_counts=category_counts,
         region_counts=region_counts,
+        geo_bucket_counts=geo_bucket_counts,
         seed=seed,
     )
-    phase_b_valid = _shuffle_records(
+    phase_b2_train = _mixed_phase_train_records(
+        families={
+            "full_sid_to_abc_profile": full_sid_train,
+            "abc_to_abc_profile": abc_train,
+            "abc_profile_to_abc": reverse_train,
+            "phase_a_replay": phase_a_train,
+        },
+        task_mix=PHASE_B2_TASK_MIX,
+        category_counts=category_counts,
+        region_counts=region_counts,
+        geo_bucket_counts=geo_bucket_counts,
+        seed=seed,
+    )
+    phase_b1_valid = _shuffle_records(
+        [*abc_valid, *full_sid_valid],
+        seed=seed,
+    )
+    phase_b2_valid = _shuffle_records(
         [*abc_valid, *reverse_valid, *full_sid_valid, *phase_a_valid],
         seed=seed,
     )
@@ -598,8 +625,10 @@ def build_alignment_data(
 
     train_phase_a_path = output_dir / "train_align_phase_a.jsonl"
     valid_phase_a_path = output_dir / "valid_align_phase_a.jsonl"
-    train_phase_b_path = output_dir / "train_align_phase_b.jsonl"
-    valid_phase_b_path = output_dir / "valid_align_phase_b.jsonl"
+    train_phase_b1_path = output_dir / "train_align_phase_b1.jsonl"
+    valid_phase_b1_path = output_dir / "valid_align_phase_b1.jsonl"
+    train_phase_b2_path = output_dir / "train_align_phase_b2.jsonl"
+    valid_phase_b2_path = output_dir / "valid_align_phase_b2.jsonl"
     manifest_path = output_dir / "alignment_manifest.json"
 
     write_json(purity_path, purity_report)
@@ -607,8 +636,10 @@ def build_alignment_data(
         write_json(profile_path, prefix_profiles[level])
     write_jsonl(train_phase_a_path, phase_a_train)
     write_jsonl(valid_phase_a_path, phase_a_valid)
-    write_jsonl(train_phase_b_path, phase_b_train)
-    write_jsonl(valid_phase_b_path, phase_b_valid)
+    write_jsonl(train_phase_b1_path, phase_b1_train)
+    write_jsonl(valid_phase_b1_path, phase_b1_valid)
+    write_jsonl(train_phase_b2_path, phase_b2_train)
+    write_jsonl(valid_phase_b2_path, phase_b2_valid)
 
     manifest = {
         "dataset": dataset,
@@ -621,24 +652,31 @@ def build_alignment_data(
         "profile_paths": {level: str(path) for level, path in profile_paths.items()},
         "phase_a_train_path": str(train_phase_a_path),
         "phase_a_valid_path": str(valid_phase_a_path),
-        "phase_b_train_path": str(train_phase_b_path),
-        "phase_b_valid_path": str(valid_phase_b_path),
+        "phase_b1_train_path": str(train_phase_b1_path),
+        "phase_b1_valid_path": str(valid_phase_b1_path),
+        "phase_b2_train_path": str(train_phase_b2_path),
+        "phase_b2_valid_path": str(valid_phase_b2_path),
         "num_pois": len(semantic_rows),
         "num_abc_groups": len(abc_prefixes),
         "num_train_abc_groups": len(train_abc),
         "num_valid_abc_groups": len(valid_abc),
         "phase_a_train_examples": len(phase_a_train),
         "phase_a_valid_examples": len(phase_a_valid),
-        "phase_b_train_examples": len(phase_b_train),
-        "phase_b_valid_examples": len(phase_b_valid),
+        "phase_b1_train_examples": len(phase_b1_train),
+        "phase_b1_valid_examples": len(phase_b1_valid),
+        "phase_b2_train_examples": len(phase_b2_train),
+        "phase_b2_valid_examples": len(phase_b2_valid),
         "phase_a_task_counts_train": _task_counts(phase_a_train),
         "phase_a_task_counts_valid": _task_counts(phase_a_valid),
-        "phase_b_task_counts_train": _task_counts(phase_b_train),
-        "phase_b_task_counts_valid": _task_counts(phase_b_valid),
+        "phase_b1_task_counts_train": _task_counts(phase_b1_train),
+        "phase_b1_task_counts_valid": _task_counts(phase_b1_valid),
+        "phase_b2_task_counts_train": _task_counts(phase_b2_train),
+        "phase_b2_task_counts_valid": _task_counts(phase_b2_valid),
         "seed": seed,
         "valid_ratio": valid_ratio,
         "negative_candidate_count": NEGATIVE_CANDIDATE_COUNT,
-        "phase_b_task_mix": PHASE_B_TASK_MIX,
+        "phase_b1_task_mix": PHASE_B1_TASK_MIX,
+        "phase_b2_task_mix": PHASE_B2_TASK_MIX,
     }
     write_json(manifest_path, manifest)
     logger.info(

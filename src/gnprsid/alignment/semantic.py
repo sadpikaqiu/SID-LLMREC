@@ -198,9 +198,12 @@ def forward_profile_sampling_weight(
     category_count = max(1, int(category_counts[category]))
     region_count = max(1, int(region_counts[region])) if region is not None else 1
     geo_count = max(1, int(geo_bucket_counts[geo_bucket])) if geo_bucket is not None else 1
-    weight = 1.0 / (region_count * math.sqrt(category_count))
-    weight *= 1.0 / math.sqrt(geo_count)
-    return min(weight, 1.0)
+    # Keep a mild anti-frequency bias so rare regions get extra exposure
+    # without erasing the true popularity prior of common regions.
+    weight = 1.0 / (region_count ** 0.35)
+    weight *= 1.0 / (category_count ** 0.15)
+    weight *= 1.0 / (geo_count ** 0.20)
+    return max(0.1, min(weight, 1.0))
 
 
 def deterministic_sample(

@@ -1,6 +1,7 @@
 from gnprsid.alignment.semantic import (
     choose_hard_negative_prefixes,
     compute_geo_bucket,
+    forward_profile_sampling_weight,
     profile_for_level,
     profile_to_json,
     sid_level,
@@ -50,3 +51,24 @@ def test_choose_hard_negative_prefixes_prefers_region_and_geo_conflicts_for_abc(
     )
     assert "<a_1><b_2><c_4>" in negatives
     assert "<a_1><b_2><c_5>" in negatives
+
+
+def test_forward_profile_sampling_weight_is_mild_not_extreme():
+    common = forward_profile_sampling_weight(
+        "Bar",
+        54,
+        "G3_3",
+        __import__("collections").Counter({"Bar": 100}),
+        __import__("collections").Counter({54: 200}),
+        __import__("collections").Counter({"G3_3": 180}),
+    )
+    rare = forward_profile_sampling_weight(
+        "Aquarium",
+        53,
+        "G0_4",
+        __import__("collections").Counter({"Aquarium": 5}),
+        __import__("collections").Counter({53: 8}),
+        __import__("collections").Counter({"G0_4": 6}),
+    )
+    assert 0.1 <= common <= 1.0
+    assert rare > common

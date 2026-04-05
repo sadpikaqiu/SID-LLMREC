@@ -1,0 +1,43 @@
+stage: grpo
+backend: verl
+dataset: NYC
+model_profile: qwen2.5-7b-instruct
+history_source: current
+repr: sid
+train_path: artifacts/NYC/grpo/sid/current/train.parquet
+valid_path: artifacts/NYC/grpo/sid/current/valid.parquet
+init_model_path: checkpoints/NYC/sft/qwen25_7b_sid_current/merged_best_2300_sft
+reward_function_path: src/gnprsid/grpo/reward_current_top10.py
+output_dir: checkpoints/NYC/grpo/qwen25_7b_sid_current
+train_batch_size: 64
+max_prompt_length: 2048
+max_response_length: 256
+filter_overlong_prompts: true
+truncation: error
+learning_rate: 1.0e-6
+ppo_mini_batch_size: 64
+ppo_micro_batch_size_per_gpu: 4
+log_prob_micro_batch_size_per_gpu: 4
+ref_log_prob_micro_batch_size_per_gpu: 4
+rollout_name: vllm
+rollout_n: 8
+gpu_memory_utilization: 0.8
+kl_loss_coef: 0.001
+kl_loss_type: low_var_kl
+n_gpus_per_node: 1
+nnodes: 1
+save_freq: 100
+test_freq: 100
+total_epochs: 3
+project_name: gnprsid-grpo
+experiment_name: nyc-sid-current
+logger: "[console]"
+lora:
+  r: 16
+  alpha: 32
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - gate_proj
+    - up_proj

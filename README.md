@@ -6,6 +6,7 @@ Linux-first refactor of GNPR-SID built around the V2 pipeline:
 - cosine+EMA SID training/export
 - SID-LLM alignment
 - SFT backend orchestration
+- GRPO backend orchestration with official `verl`
 - retrieval-based history construction
 - local batch inference and evaluation
 - clean Linux-first CLI without legacy command compatibility
@@ -36,12 +37,17 @@ python -m gnprsid.cli sid export --config configs/train/sid_nyc.yaml
 python -m gnprsid.cli alignment build-data --dataset NYC --semantic-schema semantic_spatial_v2 --grid-size 8 --split-by abc
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_a.yaml
 python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_a/final
-python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b.yaml
-python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b/final
+python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b1.yaml
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b1/final
+python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b2.yaml
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/final
 python -m gnprsid.cli alignment evaluate --dataset NYC --model-config configs/models/qwen25_7b.yaml --task sid_to_abc_profile
+python -m gnprsid.cli grpo build-data --dataset NYC
+python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_verl.yaml
+python -m gnprsid.cli train merge-verl --checkpoint-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test --config configs/retrieval/default.yaml
-python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source retrieval --model-config configs/models/qwen25_7b.yaml
+python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current --model-config configs/models/qwen25_7b.yaml --decoding-mode direct
 python -m gnprsid.cli eval run --predictions outputs/NYC/predictions/run.json
 python -m gnprsid.cli eval summarize --dataset NYC
 ```
@@ -70,16 +76,37 @@ python -m gnprsid.cli train run --stage alignment --config configs/train/alignme
 python -m gnprsid.cli train merge-peft \
   --model-config configs/models/qwen25_7b.yaml \
   --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_a/final
-python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b.yaml
+python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b1.yaml
 python -m gnprsid.cli train merge-peft \
   --model-config configs/models/qwen25_7b.yaml \
-  --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b/final
+  --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b1/final
+python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b2.yaml
+python -m gnprsid.cli train merge-peft \
+  --model-config configs/models/qwen25_7b.yaml \
+  --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/final
 python -m gnprsid.cli alignment evaluate \
   --dataset NYC \
   --model-config configs/models/qwen25_7b.yaml \
-  --checkpoint-path checkpoints/NYC/alignment/qwen25_7b_phase_b/merged \
+  --checkpoint-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/merged \
   --task sid_to_abc_profile
 python -m gnprsid.cli train run --stage sft --config configs/train/sft_llamafactory.yaml
+
+python -m gnprsid.cli train merge-peft \
+  --model-config configs/models/qwen25_7b.yaml \
+  --adapter-path checkpoints/NYC/sft/qwen25_7b_sid_current/llamafactory_output \
+  --output-path checkpoints/NYC/sft/qwen25_7b_sid_current/merged_best_2300_sft
+
+python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current \
+  --model-config configs/models/qwen25_7b.yaml \
+  --checkpoint-path checkpoints/NYC/sft/qwen25_7b_sid_current/llamafactory_output \
+  --decoding-mode direct \
+  --output-path outputs/NYC/predictions/sid_current_test_direct.json
+
+python -m gnprsid.cli grpo build-data --dataset NYC
+python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_verl.yaml
+python -m gnprsid.cli train merge-verl \
+  --checkpoint-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100 \
+  --output-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100_actor_merged
 
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test \
@@ -102,4 +129,5 @@ python -m gnprsid.cli eval summarize --dataset NYC
 - Alignment now targets the semantic core only: `Category`, `Region`, and `Geo bucket`, with `abc` as the semantic endpoint and `d` excluded from the main loss.
 - Reverse alignment tasks are multiple-choice prefix grounding tasks instead of open-ended full attribute reconstruction, because `profile -> a/ab/abc` is not one-to-one on NYC.
 - NYC import enriches `poi_info.csv` with latitude/longitude from the raw `NYC.txt` check-in table so semantic geo buckets can be computed during alignment build-data.
-- `GRPO` is reserved as a backend interface but not implemented in this first version.
+- `infer batch` now supports both `candidate_constrained` and `direct` decoding. GRPO experiments use `direct`.
+- GRPO uses the official installed `verl` package and a repo-local custom reward file; it does not vendor `SIDReasoner/verl`.

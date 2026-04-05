@@ -68,15 +68,19 @@ def run_batch_inference(
     top_k_retrieval: int | None = None,
     batch_size: int = 1,
     limit: int | None = None,
+    decoding_mode: str = "candidate_constrained",
     output_path: str | Path | None = None,
 ) -> dict:
     paths = dataset_paths(dataset)
     retrieval_bank_path = Path(retrieval_bank_path) if retrieval_bank_path else (
         paths.artifacts / "retrieval" / f"retrieval_bank_{repr_name}.jsonl"
     )
-    output_path = Path(output_path) if output_path else (
-        paths.outputs / "predictions" / f"{repr_name}_{history_source}_{split}.json"
+    default_output_name = (
+        f"{repr_name}_{history_source}_{split}.json"
+        if decoding_mode == "candidate_constrained"
+        else f"{repr_name}_{history_source}_{split}_direct.json"
     )
+    output_path = Path(output_path) if output_path else (paths.outputs / "predictions" / default_output_name)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     samples = _load_split_rows(retrieval_bank_path, split, repr_name)
@@ -99,9 +103,15 @@ def run_batch_inference(
     if top_k_retrieval is None:
         top_k_retrieval = 3 if history_source == "hybrid" else 5
 
-    candidate_space = _load_candidate_space(retrieval_bank_path, repr_name)
+    if decoding_mode not in {"candidate_constrained", "direct"}:
+        raise ValueError(f"Unsupported decoding_mode: {decoding_mode}")
+
+    candidate_space = None
+    candidate_count = 10 if decoding_mode == "direct" else 1
+    if decoding_mode == "candidate_constrained":
+        candidate_space = _load_candidate_space(retrieval_bank_path, repr_name)
     model_cfg, tokenizer, model, model_source = load_generation_model(model_config_path, checkpoint_path=checkpoint_path)
-    sys_prompt = system_prompt(repr_name, history_source, candidate_count=1)
+    sys_prompt = system_prompt(repr_name, history_source, candidate_count=candidate_count)
     prompts = []
     for sample in samples:
         user_prompt = build_prompt(
@@ -111,7 +121,7 @@ def run_batch_inference(
             similar_map=similar_map,
             bank_map=bank_map,
             top_k_retrieval=top_k_retrieval,
-            candidate_count=1,
+            candidate_count=candidate_count,
         )
         prompts.append(
             [
@@ -161,8 +171,12 @@ def run_batch_inference(
             "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
             "model_source": model_source,
             "top_k_retrieval": top_k_retrieval,
-            "decoding_mode": "candidate_constrained_beam_search",
-            "candidate_space_size": len(candidate_space),
+            "decoding_mode": (
+                "candidate_constrained_beam_search"
+                if decoding_mode == "candidate_constrained"
+                else "direct_generation"
+            ),
+            "candidate_space_size": len(candidate_space) if candidate_space is not None else 0,
             "num_samples": len(records),
         },
         "samples": records,

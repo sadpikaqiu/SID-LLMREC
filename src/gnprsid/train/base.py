@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
+from importlib.util import find_spec
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -308,15 +310,96 @@ class SFTLLaMAFactoryBackend(TrainingBackend):
 
 
 @register_backend
-class GRPOPlaceholderBackend(TrainingBackend):
+class GRPOVerlBackend(TrainingBackend):
     stage = "grpo"
-    backend_name = "placeholder"
+    backend_name = "verl"
 
     def run(self, context: TrainContext, prepared: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError(
-            "GRPO is intentionally reserved as an interface in this first Linux-first version. "
-            "Define a concrete backend before launching GRPO training."
+        if find_spec("verl") is None:
+            raise ImportError("GRPO training requires the official 'verl' package to be installed.")
+
+        cfg = context.stage_config
+        output_dir = ensure_dir(context.output_dir)
+
+        train_path = resolve_project_path(cfg["train_path"])
+        valid_path = resolve_project_path(cfg["valid_path"])
+        init_model_path = resolve_project_path(cfg["init_model_path"])
+        reward_path = resolve_project_path(cfg["reward_function_path"])
+        if not train_path.exists():
+            raise FileNotFoundError(f"Missing GRPO train parquet: {train_path}")
+        if not valid_path.exists():
+            raise FileNotFoundError(f"Missing GRPO valid parquet: {valid_path}")
+        if not init_model_path.exists():
+            raise FileNotFoundError(f"Missing GRPO init model path: {init_model_path}")
+        if not reward_path.exists():
+            raise FileNotFoundError(f"Missing GRPO reward function file: {reward_path}")
+
+        target_modules = cfg.get("lora", {}).get(
+            "target_modules",
+            ["q_proj", "k_proj", "v_proj", "gate_proj", "up_proj"],
         )
+        target_modules_expr = "[" + ",".join(str(module) for module in target_modules) + "]"
+
+        command = [
+            sys.executable,
+            "-m",
+            "verl.trainer.main_ppo",
+            "algorithm.adv_estimator=grpo",
+            f"data.train_files={train_path}",
+            f"data.val_files={valid_path}",
+            f"data.train_batch_size={int(cfg.get('train_batch_size', 64))}",
+            f"data.max_prompt_length={int(cfg.get('max_prompt_length', 2048))}",
+            f"data.max_response_length={int(cfg.get('max_response_length', 256))}",
+            f"data.filter_overlong_prompts={str(bool(cfg.get('filter_overlong_prompts', True))).lower()}",
+            f"data.truncation={cfg.get('truncation', 'error')}",
+            f"actor_rollout_ref.model.path={init_model_path}",
+            "actor_rollout_ref.model.enable_gradient_checkpointing=true",
+            "actor_rollout_ref.model.use_remove_padding=true",
+            f"actor_rollout_ref.model.lora_rank={int(cfg.get('lora', {}).get('r', 16))}",
+            f"actor_rollout_ref.model.lora_alpha={int(cfg.get('lora', {}).get('alpha', 32))}",
+            f"actor_rollout_ref.model.target_modules={target_modules_expr}",
+            f"actor_rollout_ref.actor.optim.lr={float(cfg.get('learning_rate', 1e-6))}",
+            f"actor_rollout_ref.actor.ppo_mini_batch_size={int(cfg.get('ppo_mini_batch_size', cfg.get('train_batch_size', 64)))}",
+            f"actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu={int(cfg.get('ppo_micro_batch_size_per_gpu', 4))}",
+            "actor_rollout_ref.actor.use_kl_loss=true",
+            f"actor_rollout_ref.actor.kl_loss_coef={float(cfg.get('kl_loss_coef', 0.001))}",
+            f"actor_rollout_ref.actor.kl_loss_type={cfg.get('kl_loss_type', 'low_var_kl')}",
+            "actor_rollout_ref.actor.entropy_coeff=0",
+            "actor_rollout_ref.actor.fsdp_config.param_offload=false",
+            "actor_rollout_ref.actor.fsdp_config.optimizer_offload=false",
+            f"actor_rollout_ref.rollout.name={cfg.get('rollout_name', 'vllm')}",
+            f"actor_rollout_ref.rollout.n={int(cfg.get('rollout_n', 8))}",
+            f"actor_rollout_ref.rollout.gpu_memory_utilization={float(cfg.get('gpu_memory_utilization', 0.8))}",
+            "actor_rollout_ref.rollout.tensor_model_parallel_size=1",
+            f"actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu={int(cfg.get('log_prob_micro_batch_size_per_gpu', 4))}",
+            f"actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu={int(cfg.get('ref_log_prob_micro_batch_size_per_gpu', 4))}",
+            "actor_rollout_ref.ref.fsdp_config.param_offload=true",
+            "algorithm.use_kl_in_reward=false",
+            "trainer.critic_warmup=0",
+            f"trainer.logger={cfg.get('logger', '[console]')}",
+            f"reward.custom_reward_function.path={reward_path}",
+            f"reward.custom_reward_function.name={cfg.get('reward_function_name', 'compute_score')}",
+            f"trainer.project_name={cfg.get('project_name', 'gnprsid-grpo')}",
+            f"trainer.experiment_name={cfg.get('experiment_name', 'nyc-sid-current')}",
+            f"trainer.n_gpus_per_node={int(cfg.get('n_gpus_per_node', 1))}",
+            f"trainer.nnodes={int(cfg.get('nnodes', 1))}",
+            f"trainer.save_freq={int(cfg.get('save_freq', 100))}",
+            f"trainer.test_freq={int(cfg.get('test_freq', 100))}",
+            f"trainer.total_epochs={int(cfg.get('total_epochs', 3))}",
+            f"trainer.default_local_dir={output_dir}",
+            "trainer.resume_mode=disable",
+        ]
+
+        logger.info("Running verl command: %s", " ".join(str(token) for token in command))
+        subprocess.run(command, check=True)
+        return {
+            "train_path": str(train_path),
+            "valid_path": str(valid_path),
+            "init_model_path": str(init_model_path),
+            "reward_function_path": str(reward_path),
+            "command": [str(token) for token in command],
+            "output_dir": str(output_dir),
+        }
 
 
 def run_training_stage(config_path: str | Path, stage_override: str | None = None) -> dict[str, Any]:

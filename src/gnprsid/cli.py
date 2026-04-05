@@ -52,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     eval_align.add_argument("--limit", type=int, default=None)
     eval_align.add_argument("--output-path", default=None)
 
+    grpo_parser = subparsers.add_parser("grpo")
+    grpo_sub = grpo_parser.add_subparsers(dest="grpo_command", required=True)
+    grpo_build = grpo_sub.add_parser("build-data")
+    grpo_build.add_argument("--dataset", default="NYC")
+    grpo_build.add_argument("--output-dir", default=None)
+
     train_parser = subparsers.add_parser("train")
     train_sub = train_parser.add_subparsers(dest="train_command", required=True)
     run_parser = train_sub.add_parser("run")
@@ -61,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
     merge_parser.add_argument("--model-config", required=True)
     merge_parser.add_argument("--adapter-path", required=True)
     merge_parser.add_argument("--output-path", default=None)
+    merge_verl_parser = train_sub.add_parser("merge-verl")
+    merge_verl_parser.add_argument("--checkpoint-path", required=True)
+    merge_verl_parser.add_argument("--output-path", default=None)
+    merge_verl_parser.add_argument("--backend", default="fsdp", choices=["fsdp"])
+    merge_verl_parser.add_argument("--trust-remote-code", action="store_true")
+    merge_verl_parser.add_argument("--use-cpu-init", action="store_true")
 
     retrieval_parser = subparsers.add_parser("retrieval")
     retrieval_sub = retrieval_parser.add_subparsers(dest="retrieval_command", required=True)
@@ -102,6 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser.add_argument("--top-k-retrieval", type=int, default=None)
     batch_parser.add_argument("--batch-size", type=int, default=1)
     batch_parser.add_argument("--limit", type=int, default=None)
+    batch_parser.add_argument(
+        "--decoding-mode",
+        default="candidate_constrained",
+        choices=["candidate_constrained", "direct"],
+    )
     batch_parser.add_argument("--output-path", default=None)
 
     eval_parser = subparsers.add_parser("eval")
@@ -165,18 +182,32 @@ def main() -> None:
                 output_path=args.output_path,
             )
             display_result = result["metrics"]
+    elif args.command_group == "grpo":
+        from gnprsid.grpo.build_data import build_grpo_data
+
+        result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir)
     elif args.command_group == "train":
         if args.train_command == "run":
             from gnprsid.train.base import run_training_stage
 
             result = run_training_stage(args.config, stage_override=args.stage)
-        else:
+        elif args.train_command == "merge-peft":
             from gnprsid.train.merge import merge_peft_adapter
 
             result = merge_peft_adapter(
                 model_config_path=args.model_config,
                 adapter_path=args.adapter_path,
                 output_path=args.output_path,
+            )
+        else:
+            from gnprsid.train.merge_verl import merge_verl_actor
+
+            result = merge_verl_actor(
+                checkpoint_path=args.checkpoint_path,
+                output_path=args.output_path,
+                backend=args.backend,
+                trust_remote_code=args.trust_remote_code,
+                use_cpu_init=args.use_cpu_init,
             )
     elif args.command_group == "retrieval":
         if args.retrieval_command == "build-bank":
@@ -223,6 +254,7 @@ def main() -> None:
             top_k_retrieval=args.top_k_retrieval,
             batch_size=args.batch_size,
             limit=args.limit,
+            decoding_mode=args.decoding_mode,
             output_path=args.output_path,
         )
     else:

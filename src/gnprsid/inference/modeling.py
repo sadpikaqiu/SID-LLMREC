@@ -27,6 +27,22 @@ def _resolve_model_source(source: str | Path) -> str:
     return str(source)
 
 
+def _load_tokenizer_with_fallback(AutoTokenizer, primary_source: str | Path, fallback_source: str | Path):
+    try:
+        return AutoTokenizer.from_pretrained(
+            primary_source,
+            trust_remote_code=True,
+        )
+    except AttributeError as error:
+        message = str(error)
+        if "has no attribute 'keys'" not in message:
+            raise
+        return AutoTokenizer.from_pretrained(
+            fallback_source,
+            trust_remote_code=True,
+        )
+
+
 def render_chat_prompts(tokenizer, message_batches: list[list[dict[str, str]]]) -> list[str]:
     prompts = []
     for messages in message_batches:
@@ -218,9 +234,10 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
             if checkpoint_path.joinpath("tokenizer_config.json").exists()
             else _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
         )
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = _load_tokenizer_with_fallback(
+            AutoTokenizer,
             tokenizer_source,
-            trust_remote_code=True,
+            _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source)),
         )
         model = AutoModelForCausalLM.from_pretrained(base_model_source, **model_kwargs)
         model = PeftModel.from_pretrained(model, str(checkpoint_path))
@@ -229,9 +246,10 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
         base_model_source = _resolve_model_source(model_cfg["base_model"])
         tokenizer_source = _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
         model_source = str(checkpoint_path) if checkpoint_path else base_model_source
-        tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer = _load_tokenizer_with_fallback(
+            AutoTokenizer,
             str(checkpoint_path) if checkpoint_path else tokenizer_source,
-            trust_remote_code=True,
+            tokenizer_source,
         )
         model = AutoModelForCausalLM.from_pretrained(
             str(checkpoint_path) if checkpoint_path else base_model_source,

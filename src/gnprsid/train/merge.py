@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from gnprsid.common.io import ensure_dir, read_json, write_json
@@ -15,6 +16,22 @@ def _resolve_model_source(source: str | Path) -> str:
     if project_candidate.exists():
         return str(project_candidate)
     return str(source)
+
+
+def _load_tokenizer_with_fallback(AutoTokenizer, primary_source: str | Path, fallback_source: str | Path):
+    try:
+        return AutoTokenizer.from_pretrained(
+            primary_source,
+            trust_remote_code=True,
+        )
+    except AttributeError as error:
+        message = str(error)
+        if "has no attribute 'keys'" not in message:
+            raise
+        return AutoTokenizer.from_pretrained(
+            fallback_source,
+            trust_remote_code=True,
+        )
 
 
 def merge_peft_adapter(
@@ -55,9 +72,10 @@ def merge_peft_adapter(
     if device_map not in {None, ""}:
         model_kwargs["device_map"] = device_map
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = _load_tokenizer_with_fallback(
+        AutoTokenizer,
         tokenizer_source,
-        trust_remote_code=True,
+        _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source)),
     )
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_source,
@@ -68,6 +86,9 @@ def merge_peft_adapter(
 
     merged_model.save_pretrained(str(output_path), safe_serialization=True)
     tokenizer.save_pretrained(str(output_path))
+    adapter_chat_template = adapter_path / "chat_template.jinja"
+    if adapter_chat_template.exists():
+        shutil.copy2(adapter_chat_template, output_path / "chat_template.jinja")
 
     manifest = {
         "model_config_path": str(resolve_project_path(model_config_path)),

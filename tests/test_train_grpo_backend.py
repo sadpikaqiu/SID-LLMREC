@@ -57,6 +57,6 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
     assert any(token == f"reward.custom_reward_function.path={reward_path}" for token in command)
     assert any(token == f"actor_rollout_ref.model.path={init_model_path}" for token in command)
     assert any(token == "+actor_rollout_ref.model.override_config._attn_implementation=flash_attention_2" for token in command)
-    assert any(token == "+actor_rollout_ref.rollout.update_weights_bucket_megabytes=4096" for token in command)
+    assert any(token == "actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes=4096" for token in command)
     assert captured["check"] is True
     assert manifest["result"]["output_dir"] == str(output_dir)

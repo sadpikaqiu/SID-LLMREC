@@ -9,36 +9,13 @@ from gnprsid.common.io import ensure_dir, iter_jsonl, write_json
 from gnprsid.common.logging import get_logger
 from gnprsid.common.paths import dataset_paths
 from gnprsid.common.profiles import resolve_project_path
-from gnprsid.prompts.render import (
-    PROMPT_TEMPLATE_VERSION,
-    V2_NEXT_POI_INSTRUCTION,
-    build_prompt_input_text,
-    system_prompt,
-)
+from gnprsid.prompts.render import PROMPT_TEMPLATE_VERSION, build_prompt, system_prompt
 
 
 logger = get_logger(__name__)
 
 GRPO_DATA_SOURCE = "gnprsid_nyc_sid_current"
 GRPO_ABILITY = "next_poi_current"
-
-
-def _build_grpo_current_prompt(row: dict) -> str:
-    return "\n\n".join(
-        [
-            "### Instruction:\n" + V2_NEXT_POI_INSTRUCTION,
-            "### Input:\n" + build_prompt_input_text(row, "current"),
-            "\n".join(
-                [
-                    "Output format:",
-                    "1. Return exactly 1 complete semantic ID in one line.",
-                    "2. The reply must contain only one complete semantic ID.",
-                    "3. Start the reply immediately with the semantic ID.",
-                    "4. Do not output explanations, numbering, commas, or any extra text.",
-                ]
-            ),
-        ]
-    )
 
 
 def _load_rows(path: Path) -> list[dict]:
@@ -49,9 +26,9 @@ def _load_rows(path: Path) -> list[dict]:
 
 def _to_verl_rows(rows: Iterable[dict]) -> list[dict]:
     payload: list[dict] = []
-    sys_prompt = system_prompt("sid", "current", candidate_count=1)
+    sys_prompt = system_prompt("sid", "current", candidate_count=10)
     for row in rows:
-        user_prompt = _build_grpo_current_prompt(row)
+        user_prompt = build_prompt(row, "current", candidate_count=10)
         payload.append(
             {
                 "data_source": GRPO_DATA_SOURCE,
@@ -71,7 +48,7 @@ def _to_verl_rows(rows: Iterable[dict]) -> list[dict]:
                     "history_source": "current",
                     "target": str(row["target"]),
                     "target_time": str(row["target_time"]),
-                    "prompt_template_version": f"{PROMPT_TEMPLATE_VERSION}_grpo_constrained",
+                    "prompt_template_version": PROMPT_TEMPLATE_VERSION,
                 },
             }
         )
@@ -104,8 +81,7 @@ def build_grpo_data(
         "history_source": "current",
         "data_source": GRPO_DATA_SOURCE,
         "ability": GRPO_ABILITY,
-        "prompt_template_version": f"{PROMPT_TEMPLATE_VERSION}_grpo_constrained",
-        "deployment_contract": "candidate_constrained_single_sid",
+        "prompt_template_version": PROMPT_TEMPLATE_VERSION,
         "train_path": str(train_path),
         "valid_path": str(valid_path),
         "num_train": len(train_payload),

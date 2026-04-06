@@ -373,7 +373,7 @@ class GRPOVerlBackend(TrainingBackend):
             f"actor_rollout_ref.rollout.name={cfg.get('rollout_name', 'vllm')}",
             f"actor_rollout_ref.rollout.n={int(cfg.get('rollout_n', 8))}",
             f"actor_rollout_ref.rollout.gpu_memory_utilization={float(cfg.get('gpu_memory_utilization', 0.8))}",
-            f"actor_rollout_ref.rollout.update_weights_bucket_megabytes={update_weights_bucket_megabytes}",
+            f"+actor_rollout_ref.rollout.update_weights_bucket_megabytes={update_weights_bucket_megabytes}",
             "actor_rollout_ref.rollout.tensor_model_parallel_size=1",
             f"actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu={int(cfg.get('log_prob_micro_batch_size_per_gpu', 4))}",
             f"actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu={int(cfg.get('ref_log_prob_micro_batch_size_per_gpu', 4))}",

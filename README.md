@@ -47,7 +47,7 @@ python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_verl.ya
 python -m gnprsid.cli train merge-verl --checkpoint-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test --config configs/retrieval/default.yaml
-python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current --model-config configs/models/qwen25_7b.yaml --decoding-mode direct
+python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current --model-config configs/models/qwen25_7b.yaml
 python -m gnprsid.cli eval run --predictions outputs/NYC/predictions/run.json
 python -m gnprsid.cli eval summarize --dataset NYC
 ```
@@ -99,8 +99,11 @@ python -m gnprsid.cli train merge-peft \
 python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current \
   --model-config configs/models/qwen25_7b.yaml \
   --checkpoint-path checkpoints/NYC/sft/qwen25_7b_sid_current/llamafactory_output \
-  --decoding-mode direct \
-  --output-path outputs/NYC/predictions/sid_current_test_direct.json
+  --output-path outputs/NYC/predictions/sid_current_test_grpo_baseline.json
+
+python -m gnprsid.cli eval run \
+  --predictions outputs/NYC/predictions/sid_current_test_grpo_baseline.json \
+  --output-path outputs/NYC/eval/eval_sid_current_grpo_baseline.json
 
 python -m gnprsid.cli grpo build-data --dataset NYC
 python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_verl.yaml
@@ -129,5 +132,7 @@ python -m gnprsid.cli eval summarize --dataset NYC
 - Alignment now targets the semantic core only: `Category`, `Region`, and `Geo bucket`, with `abc` as the semantic endpoint and `d` excluded from the main loss.
 - Reverse alignment tasks are multiple-choice prefix grounding tasks instead of open-ended full attribute reconstruction, because `profile -> a/ab/abc` is not one-to-one on NYC.
 - NYC import enriches `poi_info.csv` with latitude/longitude from the raw `NYC.txt` check-in table so semantic geo buckets can be computed during alignment build-data.
-- `infer batch` now supports both `candidate_constrained` and `direct` decoding. GRPO experiments use `direct`.
+- `infer batch` now supports both `candidate_constrained` and `direct` decoding.
+- The first GRPO line is aligned to `candidate_constrained` deployment: RL trains single-SID outputs, while deployment still uses constrained top-k ranking.
+- `direct` decoding remains available for future work, but is not the current GRPO mainline.
 - GRPO uses the official installed `verl` package and a repo-local custom reward file; it does not vendor `SIDReasoner/verl`.

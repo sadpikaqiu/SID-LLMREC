@@ -7,7 +7,7 @@ repr: sid
 train_path: artifacts/NYC/grpo/sid/current/train.parquet
 valid_path: artifacts/NYC/grpo/sid/current/valid.parquet
 init_model_path: checkpoints/NYC/sft/qwen25_7b_sid_current/merged_best_2300_sft
-reward_function_path: src/gnprsid/grpo/reward_current_top10.py
+reward_function_path: src/gnprsid/grpo/reward_current_single_sid.py
 output_dir: checkpoints/NYC/grpo/qwen25_7b_sid_current
 train_batch_size: 64
 max_prompt_length: 2048

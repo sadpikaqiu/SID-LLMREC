@@ -1,57 +1,38 @@
 from math import isclose
 
-from gnprsid.grpo.reward_current_top10 import compute_score
+from gnprsid.grpo.reward_current_single_sid import compute_score
 
 
-def test_grpo_reward_full_credit_for_valid_ranked_output():
+def test_grpo_reward_full_credit_for_valid_exact_output():
     target = "<a_1><b_2><c_3>"
-    prediction = " ".join(
-        [
-            "<a_1><b_2><c_3>",
-            "<a_4><b_5><c_6>",
-            "<a_7><b_8><c_9>",
-            "<a_10><b_11><c_12>",
-            "<a_13><b_14><c_15>",
-            "<a_16><b_17><c_18>",
-            "<a_19><b_20><c_21>",
-            "<a_22><b_23><c_24>",
-            "<a_25><b_26><c_27>",
-            "<a_28><b_29><c_30>",
-        ]
-    )
-    expected = 0.1 + 1.0 + 1.0 + (0.2 * (2 ** (3 - 30))) + 0.2
+    prediction = "<a_1><b_2><c_3>"
+    expected = 0.1 + 1.0 + 0.2
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)
 
 
-def test_grpo_reward_keeps_prefix_and_diversity_when_format_is_invalid():
+def test_grpo_reward_keeps_prefix_credit_when_format_is_invalid():
     target = "<a_1><b_2><c_3>"
     prediction = "<a_1><b_2><c_3> explanation"
-    expected = (0.2 * (2 ** (3 - 30))) + (0.2 * 0.1)
+    expected = 0.2
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)
 
 
-def test_grpo_reward_duplicate_predictions_reduce_diversity_and_void_format():
+def test_grpo_reward_multiple_predictions_void_format_and_exact():
     target = "<a_1><b_2><c_3>"
-    prediction = " ".join(
-        [
-            "<a_1><b_2><c_3>",
-            "<a_1><b_2><c_3>",
-            "<a_4><b_5><c_6>",
-        ]
-    )
-    expected = (0.2 * (2 ** (6 - 30))) + (0.2 * 0.2)
+    prediction = "<a_1><b_2><c_3> <a_4><b_5><c_6>"
+    expected = 0.2
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)
 
 
 def test_grpo_reward_only_counts_a_b_c_prefix_even_when_d_differs():
     target = "<a_1><b_2><c_3><d_0>"
     prediction = "<a_1><b_2><c_3><d_9>"
-    expected = (0.2 * (2 ** (3 - 30))) + (0.2 * 0.1)
+    expected = 0.1 + 0.2
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)
 
 
 def test_grpo_reward_ignores_truncated_suffixes_that_do_not_start_with_a():
     target = "<a_1><b_2><c_3>"
     prediction = "><b_2><c_3> <a_4><b_5><c_6>"
-    expected = (0.2 * (2 ** (0 - 30))) + (0.2 * 0.1)
+    expected = 0.025
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)

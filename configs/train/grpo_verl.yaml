@@ -12,6 +12,7 @@ output_dir: checkpoints/NYC/grpo/qwen25_7b_sid_current
 train_batch_size: 64
 max_prompt_length: 2048
 max_response_length: 256
+attn_implementation: eager
 filter_overlong_prompts: true
 truncation: error
 learning_rate: 1.0e-6

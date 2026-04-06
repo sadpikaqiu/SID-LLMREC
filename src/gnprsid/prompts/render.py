@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Sequence
 
 
 PROMPT_TEMPLATE_VERSION = "v2"
-SID_PATTERN = r"<[a-zA-Z]_\d+>(?:<[a-zA-Z]_\d+>){2,3}"
+SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
 ID_PATTERN = r"<\d+>"
 V2_NEXT_POI_INSTRUCTION = (
     "Here is a record of a user's POI accesses, your task is based on the history "
@@ -35,49 +35,41 @@ def build_next_poi_instruction(history_source: str) -> str:
 def build_output_requirements(repr_name: str, candidate_count: int = 10) -> str:
     count_text = _target_count_text(candidate_count)
     if repr_name == "id":
-        example = "<123>" if candidate_count == 1 else (
-            "<123> <456> <789> <1011> <1213> <1415> <1617> <1819> <2021> <2223>"
-        )
-        return "\n".join(
-            [
-                "Output format:",
-                f"1. Return {count_text} candidate POI IDs in one line.",
-                "2. Use descending likelihood order.",
-                "3. Each candidate must use the POI ID format like <123>.",
-                "4. Separate candidates with a single space only.",
-                "5. Do not output explanations, numbering, commas, or any extra text.",
-                "6. Do not repeat candidates.",
-                f"Example: {example}",
-            ]
-        )
-
-    example = (
-        "<a_1><b_2><c_3>"
-        if candidate_count == 1
-        else (
-            "<a_1><b_2><c_3> <a_1><b_2><c_8> <a_4><b_1><c_0><d_0> "
-            "<a_4><b_1><c_0><d_1> <a_9><b_3><c_7> <a_2><b_5><c_1> "
-            "<a_7><b_0><c_4> <a_5><b_6><c_2> <a_8><b_9><c_3> <a_6><b_2><c_1>"
-        )
-    )
-    return "\n".join(
-        [
-            "Semantic ID notes:",
-            "1. A semantic ID looks like <a_1><b_2><c_3> or <a_1><b_2><c_3><d_0>.",
-            "2. Prefix a is a coarse semantic group shared by broadly similar POIs.",
-            "3. Prefix b refines the group under a, and c refines it further.",
-            "4. Prefix d is only used to separate POIs when a, b, and c are identical.",
-            "5. Longer shared prefixes usually indicate more similar POIs.",
-            "",
+        lines = [
             "Output format:",
-            f"1. Return {count_text} complete semantic IDs in one line.",
+            f"1. Return {count_text} candidate POI IDs in one line.",
             "2. Use descending likelihood order.",
-            "3. Each candidate must be a complete semantic ID.",
+            "3. Each candidate must use the POI ID format like <123>.",
             "4. Separate candidates with a single space only.",
             "5. Do not output explanations, numbering, commas, or any extra text.",
             "6. Do not repeat candidates.",
-            f"Example: {example}",
         ]
+        if candidate_count != 1:
+            lines.append("7. Start the reply immediately with the first POI ID.")
+        return "\n".join(lines)
+
+    lines = [
+        "Semantic ID notes:",
+        "1. A semantic ID looks like <a_1><b_2><c_3> or <a_1><b_2><c_3><d_0>.",
+        "2. Prefix a is a coarse semantic group shared by broadly similar POIs.",
+        "3. Prefix b refines the group under a, and c refines it further.",
+        "4. Prefix d is only used to separate POIs when a, b, and c are identical.",
+        "5. Longer shared prefixes usually indicate more similar POIs.",
+        "",
+        "Output format:",
+        f"1. Return {count_text} complete semantic IDs in one line.",
+        "2. Use descending likelihood order.",
+        "3. Each candidate must be a complete semantic ID.",
+        "4. Separate candidates with a single space only.",
+        "5. Do not output explanations, numbering, commas, or any extra text.",
+        "6. Do not repeat candidates.",
+    ]
+    if candidate_count != 1:
+        lines.append("7. Start the reply immediately with the first semantic ID.")
+        return "\n".join(lines)
+
+    return "\n".join(
+        lines + ["Example: <a_1><b_2><c_3>"]
     )
 
 

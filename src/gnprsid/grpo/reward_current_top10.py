@@ -4,8 +4,8 @@ import re
 from typing import Iterable
 
 
-SID_PATTERN = r"<[a-zA-Z]_\d+>(?:<[a-zA-Z]_\d+>){2,3}"
-SID_TOKEN_PATTERN = r"<[a-zA-Z]_\d+>"
+SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
+SID_TOKEN_PATTERN = r"<[a-z]_\d+>"
 STRICT_FORMAT_WEIGHT = 0.1
 RECIPROCAL_RANK_WEIGHT = 1.0
 SOFT_HIT_WEIGHT = 1.0
@@ -72,4 +72,3 @@ def compute_score(data_source, solution_str, ground_truth, extra_info=None):
         + prefix_match_reward
         + diversity_reward
     )
-

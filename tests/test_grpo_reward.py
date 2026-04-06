@@ -48,3 +48,10 @@ def test_grpo_reward_only_counts_a_b_c_prefix_even_when_d_differs():
     prediction = "<a_1><b_2><c_3><d_9>"
     expected = (0.2 * (2 ** (3 - 30))) + (0.2 * 0.1)
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)
+
+
+def test_grpo_reward_ignores_truncated_suffixes_that_do_not_start_with_a():
+    target = "<a_1><b_2><c_3>"
+    prediction = "><b_2><c_3> <a_4><b_5><c_6>"
+    expected = (0.2 * (2 ** (0 - 30))) + (0.2 * 0.1)
+    assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)

@@ -51,6 +51,8 @@ def test_run_batch_inference_direct_mode_uses_free_generation(monkeypatch, tmp_p
 
     assert captured["allowed_completions"] is None
     assert "Return exactly 10 complete semantic IDs" in captured["prompt"]
+    assert "Example:" not in captured["prompt"]
+    assert "Start the reply immediately with the first semantic ID." in captured["prompt"]
     assert payload["metadata"]["decoding_mode"] == "direct_generation"
     assert payload["metadata"]["candidate_space_size"] == 0
 
@@ -94,4 +96,3 @@ def test_run_batch_inference_default_mode_keeps_candidate_constrained(monkeypatc
     assert "Output format:" not in captured["prompt"]
     assert payload["metadata"]["decoding_mode"] == "candidate_constrained_beam_search"
     assert payload["metadata"]["candidate_space_size"] == 2
-

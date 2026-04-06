@@ -12,7 +12,7 @@ import pandas as pd
 from gnprsid.common.io import iter_jsonl, write_jsonl
 
 
-SID_PATTERN = r"<[a-zA-Z]_\d+>(?:<[a-zA-Z]_\d+>){2,3}"
+SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
 ID_PATTERN = r"<\d+>"
 
 

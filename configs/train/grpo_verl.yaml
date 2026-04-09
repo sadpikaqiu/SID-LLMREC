@@ -22,7 +22,7 @@ ppo_micro_batch_size_per_gpu: 1
 log_prob_micro_batch_size_per_gpu: 1
 ref_log_prob_micro_batch_size_per_gpu: 1
 rollout_name: vllm
-rollout_n: 2
+rollout_n: 4
 gpu_memory_utilization: 0.45
 kl_loss_coef: 0.001
 kl_loss_type: low_var_kl

@@ -15,6 +15,7 @@ from gnprsid.common.io import copy_file, ensure_dir, write_json
 from gnprsid.common.logging import get_logger
 from gnprsid.common.paths import project_root
 from gnprsid.common.profiles import load_model_profile, resolve_model_profile_path, resolve_project_path
+from gnprsid.grpo.reward_trace import TRACE_DIR_ENV, TRACE_GROUP_SIZE_ENV
 
 
 logger = get_logger(__name__)
@@ -341,6 +342,9 @@ class GRPOVerlBackend(TrainingBackend):
         target_modules_expr = "[" + ",".join(str(module) for module in target_modules) + "]"
         attn_implementation = str(cfg.get("attn_implementation", "flash_attention_2"))
         update_weights_bucket_megabytes = int(cfg.get("update_weights_bucket_megabytes", 4096))
+        train_batch_size = int(cfg.get("train_batch_size", 64))
+        rollout_n = int(cfg.get("rollout_n", 8))
+        reward_trace_dir = ensure_dir(output_dir / "reward_traces")
 
         command = [
             sys.executable,
@@ -349,7 +353,7 @@ class GRPOVerlBackend(TrainingBackend):
             "algorithm.adv_estimator=grpo",
             f"data.train_files={train_path}",
             f"data.val_files={valid_path}",
-            f"data.train_batch_size={int(cfg.get('train_batch_size', 64))}",
+            f"data.train_batch_size={train_batch_size}",
             f"data.max_prompt_length={int(cfg.get('max_prompt_length', 2048))}",
             f"data.max_response_length={int(cfg.get('max_response_length', 256))}",
             f"data.filter_overlong_prompts={str(bool(cfg.get('filter_overlong_prompts', True))).lower()}",
@@ -362,7 +366,7 @@ class GRPOVerlBackend(TrainingBackend):
             f"actor_rollout_ref.model.target_modules={target_modules_expr}",
             f"+actor_rollout_ref.model.override_config._attn_implementation={attn_implementation}",
             f"actor_rollout_ref.actor.optim.lr={float(cfg.get('learning_rate', 1e-6))}",
-            f"actor_rollout_ref.actor.ppo_mini_batch_size={int(cfg.get('ppo_mini_batch_size', cfg.get('train_batch_size', 64)))}",
+            f"actor_rollout_ref.actor.ppo_mini_batch_size={int(cfg.get('ppo_mini_batch_size', train_batch_size))}",
             f"actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu={int(cfg.get('ppo_micro_batch_size_per_gpu', 4))}",
             "actor_rollout_ref.actor.use_kl_loss=true",
             f"actor_rollout_ref.actor.kl_loss_coef={float(cfg.get('kl_loss_coef', 0.001))}",
@@ -371,7 +375,7 @@ class GRPOVerlBackend(TrainingBackend):
             "actor_rollout_ref.actor.fsdp_config.param_offload=false",
             "actor_rollout_ref.actor.fsdp_config.optimizer_offload=false",
             f"actor_rollout_ref.rollout.name={cfg.get('rollout_name', 'vllm')}",
-            f"actor_rollout_ref.rollout.n={int(cfg.get('rollout_n', 8))}",
+            f"actor_rollout_ref.rollout.n={rollout_n}",
             f"actor_rollout_ref.rollout.gpu_memory_utilization={float(cfg.get('gpu_memory_utilization', 0.8))}",
             f"actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes={update_weights_bucket_megabytes}",
             "actor_rollout_ref.rollout.tensor_model_parallel_size=1",
@@ -395,12 +399,16 @@ class GRPOVerlBackend(TrainingBackend):
         ]
 
         logger.info("Running verl command: %s", " ".join(str(token) for token in command))
-        subprocess.run(command, check=True)
+        env = os.environ.copy()
+        env[TRACE_DIR_ENV] = str(reward_trace_dir)
+        env[TRACE_GROUP_SIZE_ENV] = str(train_batch_size * rollout_n)
+        subprocess.run(command, check=True, env=env)
         return {
             "train_path": str(train_path),
             "valid_path": str(valid_path),
             "init_model_path": str(init_model_path),
             "reward_function_path": str(reward_path),
+            "reward_trace_dir": str(reward_trace_dir),
             "command": [str(token) for token in command],
             "output_dir": str(output_dir),
         }

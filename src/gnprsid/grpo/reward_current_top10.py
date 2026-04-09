@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
+from gnprsid.grpo.reward_trace import append_reward_trace
+
 
 SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
 SID_TOKEN_PATTERN = r"<[a-z]_\d+>"
@@ -55,7 +57,7 @@ def compute_score(
     ground_truth: str,
     extra_info: dict | None = None,
 ) -> float:
-    del data_source, extra_info
+    del data_source
 
     parsed_predictions = _extract_predictions(solution_str)
     single_line_score = float(_is_single_line_output(solution_str))
@@ -77,5 +79,30 @@ def compute_score(
 
     prefix_match_reward = PREFIX_MATCH_WEIGHT * _prefix_match_score(parsed_predictions, str(ground_truth))
     diversity_reward = DIVERSITY_WEIGHT * (len(parsed_predictions) / 10.0)
+    total_reward = (
+        format_reward
+        + reciprocal_rank_reward
+        + soft_hit_reward
+        + prefix_match_reward
+        + diversity_reward
+    )
 
-    return format_reward + reciprocal_rank_reward + soft_hit_reward + prefix_match_reward + diversity_reward
+    append_reward_trace(
+        extra_info,
+        {
+            "single_line_score": single_line_score,
+            "valid_count_score": valid_count_score,
+            "exact_ten_score": exact_ten_score,
+            "parsed_prediction_count": len(parsed_predictions),
+            "hit": float(ground_truth in parsed_predictions),
+            "rank": parsed_predictions.index(ground_truth) + 1 if ground_truth in parsed_predictions else None,
+            "format_reward": format_reward,
+            "reciprocal_rank_reward": reciprocal_rank_reward,
+            "soft_hit_reward": soft_hit_reward,
+            "prefix_match_reward": prefix_match_reward,
+            "diversity_reward": diversity_reward,
+            "total_reward": total_reward,
+        },
+    )
+
+    return total_reward

@@ -4,7 +4,7 @@ import re
 from typing import Dict, List, Optional, Sequence
 
 
-PROMPT_TEMPLATE_VERSION = "v2"
+PROMPT_TEMPLATE_VERSION = "v3"
 SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
 ID_PATTERN = r"<\d+>"
 V2_NEXT_POI_INSTRUCTION = (
@@ -49,23 +49,14 @@ def build_output_requirements(repr_name: str, candidate_count: int = 10) -> str:
         return "\n".join(lines)
 
     lines = [
-        "Semantic ID notes:",
-        "1. A semantic ID looks like <a_1><b_2><c_3> or <a_1><b_2><c_3><d_0>.",
-        "2. Prefix a is a coarse semantic group shared by broadly similar POIs.",
-        "3. Prefix b refines the group under a, and c refines it further.",
-        "4. Prefix d is only used to separate POIs when a, b, and c are identical.",
-        "5. Longer shared prefixes usually indicate more similar POIs.",
-        "",
         "Output format:",
-        f"1. Return {count_text} complete semantic IDs in one line.",
+        f"1. Return {count_text} complete semantic IDs.",
         "2. Use descending likelihood order.",
-        "3. Each candidate must be a complete semantic ID.",
-        "4. Separate candidates with a single space only.",
-        "5. Do not output explanations, numbering, commas, or any extra text.",
-        "6. Do not repeat candidates.",
+        "3. Output one line with single spaces only.",
+        "4. Do not output explanations, numbering, commas, or duplicate IDs.",
     ]
     if candidate_count != 1:
-        lines.append("7. Start the reply immediately with the first semantic ID.")
+        lines.append("5. Start the reply immediately with the first semantic ID.")
         return "\n".join(lines)
 
     return "\n".join(
@@ -186,7 +177,23 @@ def build_supervised_prompt(
 
 def system_prompt(repr_name: str, history_source: str, candidate_count: int = 10) -> str:
     if repr_name == "id":
+        if candidate_count != 1:
+            return (
+                "You are a next-POI prediction assistant. "
+                "Reply with exactly 10 POI IDs in descending likelihood order. "
+                "Output one line only. Separate IDs with a single space. "
+                "Do not output explanations, numbering, commas, or duplicate IDs. "
+                "Start immediately with the first POI ID."
+            )
         return "You are a helpful assistant for next POI prediction. Reply with POI IDs only."
+    if candidate_count != 1:
+        return (
+            "You are a next-POI prediction assistant. "
+            "Reply with exactly 10 complete semantic IDs in descending likelihood order. "
+            "Output one line only. Separate IDs with a single space. "
+            "Do not output explanations, numbering, commas, or duplicate IDs. "
+            "Start immediately with the first semantic ID."
+        )
     return "You are a helpful assistant for next POI prediction. Reply with semantic IDs only."
 
 

@@ -52,7 +52,9 @@ def test_system_prompt_candidate_count_is_configurable():
     topk = system_prompt("sid", "current", candidate_count=10)
     assert "helpful assistant" in single
     assert "semantic IDs only" in single
-    assert single == topk
+    assert "exactly 10 complete semantic IDs" in topk
+    assert "single space" in topk
+    assert single != topk
 
 
 def test_direct_semantic_prompt_omits_example_tail():
@@ -60,6 +62,7 @@ def test_direct_semantic_prompt_omits_example_tail():
     assert "Return exactly 10 complete semantic IDs" in prompt
     assert "Start the reply immediately with the first semantic ID." in prompt
     assert "Example:" not in prompt
+    assert "Semantic ID notes:" not in prompt
 
 
 def test_extract_predictions_requires_complete_sid_from_a_prefix():

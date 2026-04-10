@@ -50,13 +50,14 @@ def build_output_requirements(repr_name: str, candidate_count: int = 10) -> str:
 
     lines = [
         "Output format:",
-        f"1. Return {count_text} complete semantic IDs.",
-        "2. Use descending likelihood order.",
-        "3. Output one line with single spaces only.",
-        "4. Do not output explanations, numbering, commas, or duplicate IDs.",
+        "1. A complete semantic ID must look like <a_1><b_2><c_3> or <a_1><b_2><c_3><d_0>.",
+        f"2. You must return {count_text} complete semantic IDs.",
+        "3. Use descending likelihood order.",
+        "4. Output one line with single spaces only.",
+        "5. Do not output explanations, numbering, commas, or duplicate IDs.",
     ]
     if candidate_count != 1:
-        lines.append("5. Start the reply immediately with the first semantic ID.")
+        lines.append("6. Start the reply immediately with the first semantic ID.")
         return "\n".join(lines)
 
     return "\n".join(
@@ -189,6 +190,7 @@ def system_prompt(repr_name: str, history_source: str, candidate_count: int = 10
     if candidate_count != 1:
         return (
             "You are a next-POI prediction assistant. "
+            "A complete semantic ID must look like <a_1><b_2><c_3> or <a_1><b_2><c_3><d_0>. "
             "Reply with exactly 10 complete semantic IDs in descending likelihood order. "
             "Output one line only. Separate IDs with a single space. "
             "Do not output explanations, numbering, commas, or duplicate IDs. "

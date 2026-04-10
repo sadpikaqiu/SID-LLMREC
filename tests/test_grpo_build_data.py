@@ -45,7 +45,8 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
     assert len(prompt_items) == 2
     assert prompt_items[0]["role"] == "system"
     assert "exactly 10 complete semantic IDs" in prompt_items[0]["content"]
-    assert "Return exactly 10 complete semantic IDs" in prompt_items[1]["content"]
+    assert "You must return exactly 10 complete semantic IDs" in prompt_items[1]["content"]
+    assert "<a_1><b_2><c_3>" in prompt_items[1]["content"]
     assert "Start the reply immediately with the first semantic ID." in prompt_items[1]["content"]
     assert train_df.iloc[0]["reward_model"]["ground_truth"] == "<a_1><b_2><c_3>"
     assert train_df.iloc[0]["extra_info"]["prompt_template_version"] == "v3"

@@ -50,7 +50,8 @@ def test_run_batch_inference_direct_mode_uses_free_generation(monkeypatch, tmp_p
     )
 
     assert captured["allowed_completions"] is None
-    assert "Return exactly 10 complete semantic IDs" in captured["prompt"]
+    assert "You must return exactly 10 complete semantic IDs" in captured["prompt"]
+    assert "<a_1><b_2><c_3>" in captured["prompt"]
     assert "Example:" not in captured["prompt"]
     assert "Start the reply immediately with the first semantic ID." in captured["prompt"]
     assert payload["metadata"]["decoding_mode"] == "direct_generation"

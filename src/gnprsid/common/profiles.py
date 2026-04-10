@@ -34,3 +34,42 @@ def resolve_model_profile_path(profile: str | Path) -> Path:
 
 def load_model_profile(profile: str | Path) -> dict[str, Any]:
     return load_yaml(resolve_model_profile_path(profile))
+
+
+def resolve_model_source(source: str | Path) -> str:
+    source_path = Path(str(source))
+    if source_path.is_absolute():
+        return str(source_path)
+    project_candidate = resolve_project_path(source_path)
+    if project_candidate.exists():
+        return str(project_candidate)
+    return str(source)
+
+
+def resolve_adapter_base_model_source(
+    preferred_source: str | Path | None,
+    fallback_source: str | Path,
+) -> str:
+    fallback_resolved = resolve_model_source(fallback_source)
+    if preferred_source in {None, ""}:
+        return fallback_resolved
+
+    preferred_text = str(preferred_source)
+    preferred_path = Path(preferred_text)
+    if preferred_path.is_absolute():
+        return preferred_text if preferred_path.exists() else fallback_resolved
+
+    project_candidate = resolve_project_path(preferred_path)
+    if project_candidate.exists():
+        return str(project_candidate)
+
+    # Hugging Face repo ids have at most one '/' in the common case.
+    # Deeper or backslash-based strings are almost certainly local paths.
+    if (
+        preferred_text.startswith(("./", ".\\", "../", "..\\"))
+        or "\\" in preferred_text
+        or preferred_text.count("/") > 1
+    ):
+        return fallback_resolved
+
+    return preferred_text

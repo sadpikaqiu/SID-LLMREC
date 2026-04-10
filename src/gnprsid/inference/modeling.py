@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import Iterable
 
 from gnprsid.common.io import read_json
-from gnprsid.common.profiles import load_model_profile, resolve_project_path
+from gnprsid.common.profiles import (
+    load_model_profile,
+    resolve_adapter_base_model_source,
+    resolve_model_source,
+    resolve_project_path,
+)
 from gnprsid.common.runtime import resolve_torch_dtype
 
 
@@ -15,17 +20,6 @@ def _build_fallback_chat_prompt(messages: list[dict[str, str]]) -> str:
         chunks.append(f"[{role}]\n{message['content']}")
     chunks.append("[ASSISTANT]\n")
     return "\n\n".join(chunks)
-
-
-def _resolve_model_source(source: str | Path) -> str:
-    source_path = Path(str(source))
-    if source_path.is_absolute():
-        return str(source_path)
-    project_candidate = resolve_project_path(source_path)
-    if project_candidate.exists():
-        return str(project_candidate)
-    return str(source)
-
 
 def _load_tokenizer_with_fallback(AutoTokenizer, primary_source: str | Path, fallback_source: str | Path):
     try:
@@ -226,25 +220,26 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
             raise ImportError("Loading PEFT adapters requires the 'peft' package.") from error
 
         adapter_config = read_json(checkpoint_path / "adapter_config.json")
-        base_model_source = _resolve_model_source(
-            adapter_config.get("base_model_name_or_path") or model_cfg["base_model"]
+        base_model_source = resolve_adapter_base_model_source(
+            adapter_config.get("base_model_name_or_path"),
+            model_cfg["base_model"],
         )
         tokenizer_source = (
             checkpoint_path
             if checkpoint_path.joinpath("tokenizer_config.json").exists()
-            else _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
+            else resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
         )
         tokenizer = _load_tokenizer_with_fallback(
             AutoTokenizer,
             tokenizer_source,
-            _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source)),
+            resolve_model_source(model_cfg.get("tokenizer_name", base_model_source)),
         )
         model = AutoModelForCausalLM.from_pretrained(base_model_source, **model_kwargs)
         model = PeftModel.from_pretrained(model, str(checkpoint_path))
         model_source = f"{base_model_source} + {checkpoint_path}"
     else:
-        base_model_source = _resolve_model_source(model_cfg["base_model"])
-        tokenizer_source = _resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
+        base_model_source = resolve_model_source(model_cfg["base_model"])
+        tokenizer_source = resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
         model_source = str(checkpoint_path) if checkpoint_path else base_model_source
         tokenizer = _load_tokenizer_with_fallback(
             AutoTokenizer,

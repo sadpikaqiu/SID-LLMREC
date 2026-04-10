@@ -236,8 +236,8 @@ def _render_svg_chart(
             f'stroke-linecap="round" stroke-linejoin="round" points="{polyline}" />'
         )
         legend_items.append(
-            f'<span style="display:inline-block;margin:0 16px 8px 0;">'
-            f'<span style="display:inline-block;width:11px;height:2px;background:{color};margin-right:6px;vertical-align:middle;"></span>'
+            f'<span style="display:inline-block;margin:0 18px 10px 0;font-size:14px;">'
+            f'<span style="display:inline-block;width:18px;height:3px;background:{color};margin-right:8px;vertical-align:middle;"></span>'
             f"{html.escape(label)}</span>"
         )
 
@@ -339,6 +339,13 @@ def build_reward_trace_report(
             step_values,
             {field: frame[f"cumulative_mean_{field}"].tolist() for field in TOP_LEVEL_FIELDS},
             y_axis_label="Cumulative Mean Reward",
+        )
+        + "</div><div class=\"panel\">"
+        + _render_svg_chart(
+            "Cumulative Total Reward Components",
+            step_values,
+            {field: frame[f"cumulative_sum_{field}"].tolist() for field in TOP_LEVEL_FIELDS},
+            y_axis_label="Cumulative Total Reward",
         )
         + "</div><div class=\"panel\">"
         + _render_svg_chart(

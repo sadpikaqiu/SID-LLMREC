@@ -112,3 +112,4 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
     html_report = output_path.read_text(encoding="utf-8")
     assert "Synthetic Step" in html_report
     assert "Mean Reward" in html_report
+    assert "Cumulative Total Reward" in html_report

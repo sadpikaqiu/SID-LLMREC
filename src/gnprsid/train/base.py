@@ -105,6 +105,28 @@ def _resolve_model_source(source: str | Path) -> str:
     return str(source)
 
 
+def _resolve_training_model_source(source: str | Path) -> str:
+    source_text = str(source)
+    source_path = Path(source_text)
+    if source_path.is_absolute():
+        if not source_path.exists():
+            raise FileNotFoundError(f"Missing local model path: {source_path}")
+        return str(source_path)
+
+    project_candidate = resolve_project_path(source_path)
+    if project_candidate.exists():
+        return str(project_candidate)
+
+    if (
+        source_text.startswith(("./", ".\\", "../", "..\\"))
+        or "\\" in source_text
+        or source_text.count("/") > 1
+    ):
+        raise FileNotFoundError(f"Missing local model path: {project_candidate}")
+
+    return str(source)
+
+
 @register_backend
 class AlignmentTRLBackend(TrainingBackend):
     stage = "alignment"
@@ -137,7 +159,7 @@ class AlignmentTRLBackend(TrainingBackend):
 
         device_type = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = resolve_torch_dtype(torch, str(cfg.get("dtype", model_cfg.get("dtype", "auto"))), device_type)
-        base_model_source = _resolve_model_source(cfg.get("base_model_override", model_cfg["base_model"]))
+        base_model_source = _resolve_training_model_source(cfg.get("base_model_override", model_cfg["base_model"]))
         tokenizer_source = _resolve_model_source(cfg.get("tokenizer_override", model_cfg.get("tokenizer_name", base_model_source)))
         model = AutoModelForCausalLM.from_pretrained(
             base_model_source,
@@ -285,7 +307,7 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
 
         run_output_dir = output_dir / "llamafactory_output"
         bf16 = str(model_cfg.get("dtype", "auto")).lower() == "bfloat16"
-        base_model_source = _resolve_model_source(cfg.get("base_model_override", model_cfg["base_model"]))
+        base_model_source = _resolve_training_model_source(cfg.get("base_model_override", model_cfg["base_model"]))
         train_yaml = {
             "model_name_or_path": base_model_source,
             "stage": "sft",

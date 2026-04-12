@@ -19,7 +19,7 @@ def test_run_training_stage_warmup_builds_llamafactory_command(monkeypatch, tmp_
             "backend": "llamafactory",
             "dataset": "NYC",
             "model_profile": "qwen2.5-7b-instruct",
-            "base_model_override": str(base_model_path),
+            "base_model_override": str(base_model_path.relative_to(tmp_path)),
             "train_path": str(train_path),
             "valid_path": str(valid_path),
             "output_dir": str(output_dir),
@@ -35,6 +35,7 @@ def test_run_training_stage_warmup_builds_llamafactory_command(monkeypatch, tmp_
 
     captured = {}
     monkeypatch.setattr("gnprsid.train.base.shutil.which", lambda name: "/usr/bin/llamafactory-cli")
+    monkeypatch.setattr("gnprsid.train.base.resolve_project_path", lambda path: tmp_path / path)
 
     def fake_run(command, check):
         captured["command"] = command
@@ -49,4 +50,5 @@ def test_run_training_stage_warmup_builds_llamafactory_command(monkeypatch, tmp_
     assert captured["check"] is True
     assert manifest["stage"] == "warmup"
     assert manifest["backend"] == "llamafactory"
+    assert manifest["result"]["base_model_source"] == str(base_model_path)
     assert manifest["result"]["dataset_dir"] == str(output_dir / "llamafactory_dataset")

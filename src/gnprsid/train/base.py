@@ -285,8 +285,9 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
 
         run_output_dir = output_dir / "llamafactory_output"
         bf16 = str(model_cfg.get("dtype", "auto")).lower() == "bfloat16"
+        base_model_source = _resolve_model_source(cfg.get("base_model_override", model_cfg["base_model"]))
         train_yaml = {
-            "model_name_or_path": cfg.get("base_model_override", model_cfg["base_model"]),
+            "model_name_or_path": base_model_source,
             "stage": "sft",
             "do_train": True,
             "finetuning_type": "lora",
@@ -317,6 +318,7 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
         logger.info("Running LLaMA-Factory command: %s", " ".join(command))
         subprocess.run(command, check=True)
         return {
+            "base_model_source": base_model_source,
             "dataset_dir": str(dataset_dir),
             "train_yaml_path": str(train_yaml_path),
             "run_output_dir": str(run_output_dir),

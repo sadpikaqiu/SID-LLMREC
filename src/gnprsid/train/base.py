@@ -233,6 +233,19 @@ class SFTLLaMAFactoryBackend(TrainingBackend):
     backend_name = "llamafactory"
 
     def run(self, context: TrainContext, prepared: dict[str, Any]) -> dict[str, Any]:
+        return _run_llamafactory_backend(context)
+
+
+@register_backend
+class WarmupLLaMAFactoryBackend(TrainingBackend):
+    stage = "warmup"
+    backend_name = "llamafactory"
+
+    def run(self, context: TrainContext, prepared: dict[str, Any]) -> dict[str, Any]:
+        return _run_llamafactory_backend(context)
+
+
+def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
         cli_path = shutil.which("llamafactory-cli")
         if not cli_path:
             raise FileNotFoundError(

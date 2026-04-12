@@ -58,10 +58,17 @@ def build_parser() -> argparse.ArgumentParser:
     grpo_build.add_argument("--dataset", default="NYC")
     grpo_build.add_argument("--output-dir", default=None)
 
+    warmup_parser = subparsers.add_parser("warmup")
+    warmup_sub = warmup_parser.add_subparsers(dest="warmup_command", required=True)
+    warmup_build = warmup_sub.add_parser("build-data")
+    warmup_build.add_argument("--dataset", default="NYC")
+    warmup_build.add_argument("--history-source", default="current", choices=["current"])
+    warmup_build.add_argument("--output-dir", default=None)
+
     train_parser = subparsers.add_parser("train")
     train_sub = train_parser.add_subparsers(dest="train_command", required=True)
     run_parser = train_sub.add_parser("run")
-    run_parser.add_argument("--stage", choices=["alignment", "sft", "grpo"], required=True)
+    run_parser.add_argument("--stage", choices=["alignment", "sft", "warmup", "grpo"], required=True)
     run_parser.add_argument("--config", required=True)
     merge_parser = train_sub.add_parser("merge-peft")
     merge_parser.add_argument("--model-config", required=True)
@@ -186,6 +193,14 @@ def main() -> None:
         from gnprsid.grpo.build_data import build_grpo_data
 
         result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir)
+    elif args.command_group == "warmup":
+        from gnprsid.warmup.build_data import build_warmup_data
+
+        result = build_warmup_data(
+            dataset=args.dataset,
+            history_source=args.history_source,
+            output_dir=args.output_dir,
+        )
     elif args.command_group == "train":
         if args.train_command == "run":
             from gnprsid.train.base import run_training_stage

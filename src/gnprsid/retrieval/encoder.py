@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from gnprsid.common.runtime import resolve_torch_dtype
+from gnprsid.common.tokenizer import build_tokenizer_load_kwargs
 
 
 def load_encoder(
@@ -19,7 +20,10 @@ def load_encoder(
     except ImportError as error:
         raise ImportError("Retrieval encoding requires torch and transformers.") from error
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name_or_path,
+        **build_tokenizer_load_kwargs(use_fast=True),
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

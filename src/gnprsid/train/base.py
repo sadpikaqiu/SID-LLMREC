@@ -16,6 +16,7 @@ from gnprsid.common.logging import get_logger
 from gnprsid.common.paths import project_root
 from gnprsid.common.profiles import load_model_profile, resolve_model_profile_path, resolve_project_path
 from gnprsid.grpo.reward_trace import TRACE_DIR_ENV, TRACE_GROUP_SIZE_ENV
+from gnprsid.common.tokenizer import build_tokenizer_load_kwargs
 
 
 logger = get_logger(__name__)
@@ -250,7 +251,10 @@ class AlignmentTRLBackend(TrainingBackend):
             dtype=dtype,
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_source,
+            **build_tokenizer_load_kwargs(),
+        )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"

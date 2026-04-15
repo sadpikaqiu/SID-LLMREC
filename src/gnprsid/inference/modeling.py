@@ -11,6 +11,7 @@ from gnprsid.common.profiles import (
     resolve_project_path,
 )
 from gnprsid.common.runtime import resolve_torch_dtype
+from gnprsid.common.tokenizer import load_tokenizer_with_fallback as _load_tokenizer_with_fallback
 
 
 def _build_fallback_chat_prompt(messages: list[dict[str, str]]) -> str:
@@ -20,21 +21,6 @@ def _build_fallback_chat_prompt(messages: list[dict[str, str]]) -> str:
         chunks.append(f"[{role}]\n{message['content']}")
     chunks.append("[ASSISTANT]\n")
     return "\n\n".join(chunks)
-
-def _load_tokenizer_with_fallback(AutoTokenizer, primary_source: str | Path, fallback_source: str | Path):
-    try:
-        return AutoTokenizer.from_pretrained(
-            primary_source,
-            trust_remote_code=True,
-        )
-    except AttributeError as error:
-        message = str(error)
-        if "has no attribute 'keys'" not in message:
-            raise
-        return AutoTokenizer.from_pretrained(
-            fallback_source,
-            trust_remote_code=True,
-        )
 
 
 def _resolve_chat_template_kwargs(model_cfg: dict) -> dict:

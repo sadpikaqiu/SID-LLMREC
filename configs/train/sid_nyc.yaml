@@ -1,9 +1,9 @@
 dataset: NYC
 model_profile: qwen2.5-7b-instruct
 poi_info_path: data/NYC/processed/poi_info.csv
-category_model_name: /home/sylteacher/models/all-MiniLM-L6-v2
+category_model_name: sentence-transformers/all-MiniLM-L6-v2
 category_embedding_dim: 64
-region_model_name: /home/sylteacher/models/all-MiniLM-L6-v2
+region_model_name: sentence-transformers/all-MiniLM-L6-v2
 region_embedding_dim: 64
 poi_embedding_output_dir: artifacts/NYC/poi_embedding
 poi_embedding_path: artifacts/NYC/poi_embedding/poi_emb_dict.pkl

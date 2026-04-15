@@ -92,7 +92,7 @@ def test_run_training_stage_warmup_rejects_missing_local_base_model(monkeypatch,
         run_training_stage(config_path, stage_override="warmup")
 
 
-def test_run_training_stage_warmup_uses_torchrun_when_num_processes_set(monkeypatch, tmp_path):
+def test_run_training_stage_warmup_defers_multi_gpu_launch_to_llamafactory(monkeypatch, tmp_path):
     output_dir = tmp_path / "warmup-output"
     train_path = tmp_path / "train.jsonl"
     valid_path = tmp_path / "valid.jsonl"
@@ -126,14 +126,7 @@ def test_run_training_stage_warmup_uses_torchrun_when_num_processes_set(monkeypa
 
     captured = {}
 
-    def fake_which(name):
-        if name == "llamafactory-cli":
-            return "/usr/bin/llamafactory-cli"
-        if name == "torchrun":
-            return "/usr/bin/torchrun"
-        return None
-
-    monkeypatch.setattr("gnprsid.train.base.shutil.which", fake_which)
+    monkeypatch.setattr("gnprsid.train.base.shutil.which", lambda name: "/usr/bin/llamafactory-cli")
     monkeypatch.setattr("gnprsid.train.base.resolve_project_path", lambda path: tmp_path / path)
 
     def fake_run(command, check):
@@ -145,8 +138,7 @@ def test_run_training_stage_warmup_uses_torchrun_when_num_processes_set(monkeypa
     manifest = run_training_stage(config_path, stage_override="warmup")
 
     command = captured["command"]
-    assert command[:3] == ["/usr/bin/torchrun", "--nproc_per_node=4", "--standalone"]
-    assert command[3:] == ["/usr/bin/llamafactory-cli", "train", str(output_dir / "llamafactory_train.yaml")]
+    assert command == ["/usr/bin/llamafactory-cli", "train", str(output_dir / "llamafactory_train.yaml")]
     assert captured["check"] is True
-    assert manifest["result"]["distributed_launch"] is True
+    assert manifest["result"]["distributed_launch"] is False
     assert manifest["result"]["num_processes"] == 4

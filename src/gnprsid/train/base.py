@@ -429,12 +429,7 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
         train_yaml_path = output_dir / "llamafactory_train.yaml"
         dump_yaml(train_yaml_path, train_yaml)
 
-        launched_distributed = _requested_num_processes(cfg) > 1 and not _is_torchrun_worker()
-        if launched_distributed:
-            command = _build_torchrun_prefix(cfg)
-            command.extend([cli_path, "train", str(train_yaml_path)])
-        else:
-            command = [cli_path, "train", str(train_yaml_path)]
+        command = [cli_path, "train", str(train_yaml_path)]
         logger.info("Running LLaMA-Factory command: %s", " ".join(command))
         subprocess.run(command, check=True)
         return {
@@ -442,7 +437,7 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
             "dataset_dir": str(dataset_dir),
             "train_yaml_path": str(train_yaml_path),
             "run_output_dir": str(run_output_dir),
-            "distributed_launch": launched_distributed,
+            "distributed_launch": False,
             "num_processes": _requested_num_processes(cfg),
             "command": command,
         }

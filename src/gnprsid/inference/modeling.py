@@ -37,12 +37,34 @@ def _load_tokenizer_with_fallback(AutoTokenizer, primary_source: str | Path, fal
         )
 
 
-def render_chat_prompts(tokenizer, message_batches: list[list[dict[str, str]]]) -> list[str]:
+def _resolve_chat_template_kwargs(model_cfg: dict) -> dict:
+    kwargs = dict(model_cfg.get("chat_template_kwargs", {}))
+    if "enable_thinking" in model_cfg and "enable_thinking" not in kwargs:
+        kwargs["enable_thinking"] = bool(model_cfg["enable_thinking"])
+    return kwargs
+
+
+def render_chat_prompts(
+    tokenizer,
+    message_batches: list[list[dict[str, str]]],
+    chat_template_kwargs: dict | None = None,
+) -> list[str]:
     prompts = []
+    template_kwargs = dict(chat_template_kwargs or {})
     for messages in message_batches:
         if hasattr(tokenizer, "apply_chat_template"):
             try:
-                prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                prompt = tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    **template_kwargs,
+                )
+            except TypeError as error:
+                if template_kwargs and "unexpected keyword argument" in str(error):
+                    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                else:
+                    raise
             except Exception:
                 prompt = _build_fallback_chat_prompt(messages)
         else:
@@ -335,7 +357,11 @@ def generate_from_messages(
     allowed_completions: list[str] | None = None,
     top_k_sequences: int = 10,
 ) -> list[str]:
-    prompts = render_chat_prompts(tokenizer, message_batches)
+    prompts = render_chat_prompts(
+        tokenizer,
+        message_batches,
+        chat_template_kwargs=_resolve_chat_template_kwargs(model_cfg),
+    )
     return generate_from_raw_prompts(
         model_cfg,
         tokenizer,

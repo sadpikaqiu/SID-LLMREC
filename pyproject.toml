@@ -24,6 +24,7 @@ dependencies = [
   "sentence-transformers>=3.0",
   "sentencepiece>=0.2.0",
   "safetensors>=0.4.5",
+  "openlocationcode>=1.0.1",
 ]
 
 [project.optional-dependencies]

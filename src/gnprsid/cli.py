@@ -14,6 +14,11 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--dataset", default="NYC")
     import_parser.add_argument("--legacy-root", required=True)
 
+    raw_parser = data_sub.add_parser("build-from-raw")
+    raw_parser.add_argument("--dataset", default="NYC")
+    raw_parser.add_argument("--raw-path", default=None)
+    raw_parser.add_argument("--seed", type=int, default=42)
+
     prepare_parser = data_sub.add_parser("prepare-nyc")
     prepare_parser.add_argument("--dataset", default="NYC")
     prepare_parser.add_argument("--current-k", type=int, default=49)
@@ -148,9 +153,16 @@ def main() -> None:
     if args.command_group == "data":
         from gnprsid.data.legacy import import_legacy_dataset
         from gnprsid.data.prepare import prepare_nyc
+        from gnprsid.data.raw_nyc import RawBuildConfig, build_nyc_from_raw
 
         if args.data_command == "import-legacy":
             result = import_legacy_dataset(args.dataset, args.legacy_root)
+        elif args.data_command == "build-from-raw":
+            result = build_nyc_from_raw(
+                dataset=args.dataset,
+                raw_path=args.raw_path,
+                config=RawBuildConfig(dataset=args.dataset, seed=args.seed),
+            )
         else:
             result = prepare_nyc(args.dataset, args.current_k, sid_map_path=args.sid_map_path)
     elif args.command_group == "sid":

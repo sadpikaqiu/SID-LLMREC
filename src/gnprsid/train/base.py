@@ -20,6 +20,8 @@ from gnprsid.grpo.reward_trace import TRACE_DIR_ENV, TRACE_GROUP_SIZE_ENV
 
 logger = get_logger(__name__)
 
+TORCHRUN_SKIP_MANIFEST_ENV = "GNPRSID_SKIP_MANIFEST_WRITE"
+
 
 @dataclass
 class TrainContext:
@@ -127,12 +129,70 @@ def _resolve_training_model_source(source: str | Path) -> str:
     return str(source)
 
 
+def _requested_num_processes(cfg: dict[str, Any]) -> int:
+    return int(cfg.get("num_processes", 1))
+
+
+def _is_torchrun_worker() -> bool:
+    return "LOCAL_RANK" in os.environ or int(os.environ.get("WORLD_SIZE", "1")) > 1
+
+
+def _build_torchrun_prefix(cfg: dict[str, Any]) -> list[str]:
+    torchrun_path = shutil.which("torchrun")
+    if not torchrun_path:
+        raise FileNotFoundError("Could not find 'torchrun'. Install PyTorch distributed tooling first.")
+
+    num_processes = _requested_num_processes(cfg)
+    nnodes = int(cfg.get("nnodes", 1))
+    command = [torchrun_path, f"--nproc_per_node={num_processes}"]
+    if nnodes == 1:
+        command.append("--standalone")
+    else:
+        command.extend(
+            [
+                f"--nnodes={nnodes}",
+                f"--node_rank={int(cfg.get('node_rank', 0))}",
+                f"--master_addr={cfg.get('master_addr', '127.0.0.1')}",
+                f"--master_port={int(cfg.get('master_port', 29500))}",
+            ]
+        )
+    return command
+
+
+def _launch_stage_via_torchrun(context: TrainContext) -> dict[str, Any]:
+    command = _build_torchrun_prefix(context.stage_config)
+    command.extend(
+        [
+            "-m",
+            "gnprsid.cli",
+            "train",
+            "run",
+            "--stage",
+            context.stage,
+            "--config",
+            str(context.config_path),
+        ]
+    )
+    env = os.environ.copy()
+    env[TORCHRUN_SKIP_MANIFEST_ENV] = "1"
+    logger.info("Running distributed %s command: %s", context.stage, " ".join(command))
+    subprocess.run(command, check=True, env=env)
+    return {
+        "distributed_launch": True,
+        "num_processes": _requested_num_processes(context.stage_config),
+        "command": command,
+    }
+
+
 @register_backend
 class AlignmentTRLBackend(TrainingBackend):
     stage = "alignment"
     backend_name = "trl"
 
     def run(self, context: TrainContext, prepared: dict[str, Any]) -> dict[str, Any]:
+        if _requested_num_processes(context.stage_config) > 1 and not _is_torchrun_worker():
+            return _launch_stage_via_torchrun(context)
+
         try:
             import torch
             from datasets import load_dataset
@@ -336,7 +396,12 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
         train_yaml_path = output_dir / "llamafactory_train.yaml"
         dump_yaml(train_yaml_path, train_yaml)
 
-        command = [cli_path, "train", str(train_yaml_path)]
+        launched_distributed = _requested_num_processes(cfg) > 1 and not _is_torchrun_worker()
+        if launched_distributed:
+            command = _build_torchrun_prefix(cfg)
+            command.extend([cli_path, "train", str(train_yaml_path)])
+        else:
+            command = [cli_path, "train", str(train_yaml_path)]
         logger.info("Running LLaMA-Factory command: %s", " ".join(command))
         subprocess.run(command, check=True)
         return {
@@ -344,6 +409,9 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
             "dataset_dir": str(dataset_dir),
             "train_yaml_path": str(train_yaml_path),
             "run_output_dir": str(run_output_dir),
+            "distributed_launch": launched_distributed,
+            "num_processes": _requested_num_processes(cfg),
+            "command": command,
         }
 
 
@@ -460,6 +528,9 @@ def run_training_stage(config_path: str | Path, stage_override: str | None = Non
     backend = backend_cls()
     prepared = backend.prepare(context)
     result = backend.run(context, prepared)
+    if os.environ.get(TORCHRUN_SKIP_MANIFEST_ENV) == "1":
+        logger.info("Finished distributed worker stage=%s backend=%s", context.stage, context.backend)
+        return result
     manifest = backend.collect_artifacts(context, prepared, result)
     logger.info("Finished training stage=%s backend=%s", context.stage, context.backend)
     return manifest

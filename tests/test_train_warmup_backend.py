@@ -90,3 +90,63 @@ def test_run_training_stage_warmup_rejects_missing_local_base_model(monkeypatch,
 
     with pytest.raises(FileNotFoundError, match="Missing local model path"):
         run_training_stage(config_path, stage_override="warmup")
+
+
+def test_run_training_stage_warmup_uses_torchrun_when_num_processes_set(monkeypatch, tmp_path):
+    output_dir = tmp_path / "warmup-output"
+    train_path = tmp_path / "train.jsonl"
+    valid_path = tmp_path / "valid.jsonl"
+    base_model_path = tmp_path / "alignment-merged"
+    train_path.write_text('{"instruction":"i","input":"q","output":"o"}\n', encoding="utf-8")
+    valid_path.write_text('{"instruction":"i","input":"q","output":"o"}\n', encoding="utf-8")
+    base_model_path.mkdir()
+
+    config_path = tmp_path / "warmup.yaml"
+    dump_yaml(
+        config_path,
+        {
+            "stage": "warmup",
+            "backend": "llamafactory",
+            "dataset": "NYC",
+            "model_profile": "qwen2.5-7b-instruct",
+            "base_model_override": str(base_model_path.relative_to(tmp_path)),
+            "train_path": str(train_path),
+            "valid_path": str(valid_path),
+            "output_dir": str(output_dir),
+            "cutoff_len": 3072,
+            "template": "qwen",
+            "per_device_train_batch_size": 8,
+            "gradient_accumulation_steps": 2,
+            "learning_rate": 2.0e-5,
+            "num_train_epochs": 3,
+            "num_processes": 4,
+            "lora_target": ["q_proj", "k_proj", "v_proj", "gate_proj", "up_proj"],
+        },
+    )
+
+    captured = {}
+
+    def fake_which(name):
+        if name == "llamafactory-cli":
+            return "/usr/bin/llamafactory-cli"
+        if name == "torchrun":
+            return "/usr/bin/torchrun"
+        return None
+
+    monkeypatch.setattr("gnprsid.train.base.shutil.which", fake_which)
+    monkeypatch.setattr("gnprsid.train.base.resolve_project_path", lambda path: tmp_path / path)
+
+    def fake_run(command, check):
+        captured["command"] = command
+        captured["check"] = check
+
+    monkeypatch.setattr("gnprsid.train.base.subprocess.run", fake_run)
+
+    manifest = run_training_stage(config_path, stage_override="warmup")
+
+    command = captured["command"]
+    assert command[:3] == ["/usr/bin/torchrun", "--nproc_per_node=4", "--standalone"]
+    assert command[3:] == ["/usr/bin/llamafactory-cli", "train", str(output_dir / "llamafactory_train.yaml")]
+    assert captured["check"] is True
+    assert manifest["result"]["distributed_launch"] is True
+    assert manifest["result"]["num_processes"] == 4

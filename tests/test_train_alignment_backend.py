@@ -128,3 +128,50 @@ def test_run_training_stage_alignment_still_launches_torchrun_when_only_world_si
     assert captured["command"][:3] == ["/usr/bin/torchrun", "--nproc_per_node=4", "--standalone"]
     assert captured["env"][TORCHRUN_SKIP_MANIFEST_ENV] == "1"
     assert manifest["result"]["distributed_launch"] is True
+
+
+def test_run_training_stage_alignment_does_not_relaunch_when_skip_manifest_env_present(monkeypatch, tmp_path):
+    output_dir = tmp_path / "alignment-output"
+    train_path = tmp_path / "train.jsonl"
+    valid_path = tmp_path / "valid.jsonl"
+    base_model_path = tmp_path / "model"
+    train_path.write_text('{"instruction":"i","input":"q","output":"o"}\n', encoding="utf-8")
+    valid_path.write_text('{"instruction":"i","input":"q","output":"o"}\n', encoding="utf-8")
+    base_model_path.mkdir()
+
+    config_path = tmp_path / "alignment.yaml"
+    dump_yaml(
+        config_path,
+        {
+            "stage": "alignment",
+            "backend": "trl",
+            "dataset": "NYC",
+            "model_profile": "qwen2.5-7b-instruct",
+            "base_model_override": str(base_model_path),
+            "train_path": str(train_path),
+            "valid_path": str(valid_path),
+            "output_dir": str(output_dir),
+            "batch_size": 16,
+            "gradient_accumulation_steps": 2,
+            "num_train_epochs": 4,
+            "learning_rate": 2.0e-5,
+            "cutoff_len": 512,
+            "num_processes": 4,
+            "lora": {
+                "r": 16,
+                "alpha": 32,
+                "dropout": 0.05,
+                "target_modules": ["embed_tokens", "lm_head"],
+            },
+        },
+    )
+
+    monkeypatch.setenv(TORCHRUN_SKIP_MANIFEST_ENV, "1")
+    monkeypatch.setattr("gnprsid.train.base.find_spec", lambda name: None)
+
+    try:
+        run_training_stage(config_path, stage_override="alignment")
+    except ImportError as error:
+        assert "Alignment training requires" in str(error)
+    else:
+        raise AssertionError("Expected alignment backend to continue locally instead of relaunching torchrun.")

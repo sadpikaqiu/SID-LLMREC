@@ -134,7 +134,11 @@ def _requested_num_processes(cfg: dict[str, Any]) -> int:
 
 
 def _is_torchrun_worker() -> bool:
-    return "LOCAL_RANK" in os.environ or "TORCHELASTIC_RUN_ID" in os.environ
+    return (
+        os.environ.get(TORCHRUN_SKIP_MANIFEST_ENV) == "1"
+        or "LOCAL_RANK" in os.environ
+        or "TORCHELASTIC_RUN_ID" in os.environ
+    )
 
 
 def _build_torchrun_prefix(cfg: dict[str, Any]) -> list[str]:

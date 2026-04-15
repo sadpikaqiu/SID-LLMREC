@@ -188,6 +188,24 @@ def _launch_stage_via_torchrun(context: TrainContext) -> dict[str, Any]:
     }
 
 
+def _alignment_runtime_options(cfg: dict[str, Any]) -> dict[str, Any]:
+    num_processes = _requested_num_processes(cfg)
+    gradient_checkpointing = bool(cfg.get("gradient_checkpointing", num_processes <= 1))
+    gradient_checkpointing_kwargs = cfg.get("gradient_checkpointing_kwargs")
+    if gradient_checkpointing and gradient_checkpointing_kwargs is None:
+        gradient_checkpointing_kwargs = {"use_reentrant": False}
+
+    ddp_find_unused_parameters = cfg.get("ddp_find_unused_parameters")
+    if ddp_find_unused_parameters is None and num_processes > 1:
+        ddp_find_unused_parameters = False
+
+    return {
+        "gradient_checkpointing": gradient_checkpointing,
+        "gradient_checkpointing_kwargs": gradient_checkpointing_kwargs,
+        "ddp_find_unused_parameters": ddp_find_unused_parameters,
+    }
+
+
 @register_backend
 class AlignmentTRLBackend(TrainingBackend):
     stage = "alignment"
@@ -212,6 +230,7 @@ class AlignmentTRLBackend(TrainingBackend):
 
         cfg = context.stage_config
         model_cfg = context.model_profile
+        runtime_options = _alignment_runtime_options(cfg)
         set_seed(int(cfg.get("seed", 42)))
         if cfg.get("wandb_project"):
             os.environ["WANDB_PROJECT"] = str(cfg["wandb_project"])
@@ -230,7 +249,6 @@ class AlignmentTRLBackend(TrainingBackend):
             trust_remote_code=True,
             dtype=dtype,
         )
-        model.gradient_checkpointing_enable()
 
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, trust_remote_code=True)
         if tokenizer.pad_token is None:
@@ -274,24 +292,31 @@ class AlignmentTRLBackend(TrainingBackend):
         )
 
         bf16 = str(cfg.get("dtype", model_cfg.get("dtype", "auto"))).lower() == "bfloat16"
-        training_args = SFTConfig(
-            output_dir=str(context.output_dir),
-            per_device_train_batch_size=int(cfg["batch_size"]),
-            per_device_eval_batch_size=int(cfg["batch_size"]),
-            gradient_accumulation_steps=int(cfg["gradient_accumulation_steps"]),
-            num_train_epochs=float(cfg["num_train_epochs"]),
-            learning_rate=float(cfg["learning_rate"]),
-            eval_strategy="steps",
-            eval_steps=int(cfg.get("eval_steps", 50)),
-            save_steps=int(cfg.get("save_steps", 100)),
-            logging_steps=int(cfg.get("logging_steps", 10)),
-            warmup_steps=int(cfg.get("warmup_steps", 100)),
-            bf16=bf16,
-            report_to="wandb" if cfg.get("wandb_project") else "none",
-            run_name=str(cfg.get("wandb_run_name", "alignment")),
-            max_length=int(cfg["cutoff_len"]),
-            completion_only_loss=True,
-        )
+        training_args_kwargs = {
+            "output_dir": str(context.output_dir),
+            "per_device_train_batch_size": int(cfg["batch_size"]),
+            "per_device_eval_batch_size": int(cfg["batch_size"]),
+            "gradient_accumulation_steps": int(cfg["gradient_accumulation_steps"]),
+            "num_train_epochs": float(cfg["num_train_epochs"]),
+            "learning_rate": float(cfg["learning_rate"]),
+            "eval_strategy": "steps",
+            "eval_steps": int(cfg.get("eval_steps", 50)),
+            "save_steps": int(cfg.get("save_steps", 100)),
+            "logging_steps": int(cfg.get("logging_steps", 10)),
+            "warmup_steps": int(cfg.get("warmup_steps", 100)),
+            "bf16": bf16,
+            "report_to": "wandb" if cfg.get("wandb_project") else "none",
+            "run_name": str(cfg.get("wandb_run_name", "alignment")),
+            "max_length": int(cfg["cutoff_len"]),
+            "completion_only_loss": True,
+            "gradient_checkpointing": runtime_options["gradient_checkpointing"],
+        }
+        if runtime_options["gradient_checkpointing_kwargs"] is not None:
+            training_args_kwargs["gradient_checkpointing_kwargs"] = runtime_options["gradient_checkpointing_kwargs"]
+        if runtime_options["ddp_find_unused_parameters"] is not None:
+            training_args_kwargs["ddp_find_unused_parameters"] = runtime_options["ddp_find_unused_parameters"]
+
+        training_args = SFTConfig(**training_args_kwargs)
         trainer = SFTTrainer(
             model=model,
             train_dataset=train_data,

@@ -1,5 +1,25 @@
 from gnprsid.common.config import dump_yaml
-from gnprsid.train.base import TORCHRUN_SKIP_MANIFEST_ENV, run_training_stage
+from gnprsid.train.base import (
+    TORCHRUN_SKIP_MANIFEST_ENV,
+    _alignment_runtime_options,
+    run_training_stage,
+)
+
+
+def test_alignment_runtime_options_keep_checkpointing_for_single_process():
+    runtime = _alignment_runtime_options({})
+
+    assert runtime["gradient_checkpointing"] is True
+    assert runtime["gradient_checkpointing_kwargs"] == {"use_reentrant": False}
+    assert runtime["ddp_find_unused_parameters"] is None
+
+
+def test_alignment_runtime_options_disable_checkpointing_for_multi_process():
+    runtime = _alignment_runtime_options({"num_processes": 4})
+
+    assert runtime["gradient_checkpointing"] is False
+    assert runtime["gradient_checkpointing_kwargs"] is None
+    assert runtime["ddp_find_unused_parameters"] is False
 
 
 def test_run_training_stage_alignment_uses_torchrun_when_num_processes_set(monkeypatch, tmp_path):

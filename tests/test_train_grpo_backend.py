@@ -65,7 +65,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
     assert any(token == f"data.train_files={train_path}" for token in command)
     assert any(token == f"reward.custom_reward_function.path={reward_path}" for token in command)
     assert any(token == f"actor_rollout_ref.model.path={init_model_path}" for token in command)
-    assert any(token == "actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2" for token in command)
+    assert any(token == "+actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2" for token in command)
     assert any(token == "actor_rollout_ref.model.use_remove_padding=false" for token in command)
     assert any(token == "actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes=4096" for token in command)
     assert any(token == "actor_rollout_ref.rollout.tensor_model_parallel_size=2" for token in command)

@@ -207,6 +207,31 @@ def _alignment_runtime_options(cfg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _cleanup_grpo_runtime_processes() -> list[list[str]]:
+    cleanup_commands: list[list[str]] = []
+    ray_cli = shutil.which("ray")
+    if ray_cli:
+        cleanup_commands.append([ray_cli, "stop", "--force"])
+
+    pkill_cli = shutil.which("pkill")
+    if pkill_cli:
+        cleanup_commands.extend(
+            [
+                [pkill_cli, "-f", "VLLM::EngineCore"],
+                [pkill_cli, "-f", "VLLM::Worker_TP"],
+            ]
+        )
+
+    attempted: list[list[str]] = []
+    for cleanup_command in cleanup_commands:
+        attempted.append(cleanup_command)
+        try:
+            subprocess.run(cleanup_command, check=False)
+        except OSError as error:
+            logger.warning("Failed to execute cleanup command %s: %s", " ".join(cleanup_command), error)
+    return attempted
+
+
 @register_backend
 class AlignmentTRLBackend(TrainingBackend):
     stage = "alignment"
@@ -538,7 +563,16 @@ class GRPOVerlBackend(TrainingBackend):
         env = os.environ.copy()
         env[TRACE_DIR_ENV] = str(reward_trace_dir)
         env[TRACE_GROUP_SIZE_ENV] = str(train_batch_size * rollout_n)
-        subprocess.run(command, check=True, env=env)
+        try:
+            subprocess.run(command, check=True, env=env)
+        except subprocess.CalledProcessError:
+            attempted_cleanup = _cleanup_grpo_runtime_processes()
+            if attempted_cleanup:
+                logger.warning(
+                    "GRPO training failed; attempted cleanup commands: %s",
+                    [" ".join(cleanup_command) for cleanup_command in attempted_cleanup],
+                )
+            raise
         return {
             "train_path": str(train_path),
             "valid_path": str(valid_path),

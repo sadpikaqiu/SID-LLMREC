@@ -32,6 +32,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
             "output_dir": str(output_dir),
             "logger": "[console]",
             "tensor_model_parallel_size": 2,
+            "use_remove_padding": False,
             "actor_param_offload": True,
             "actor_optimizer_offload": True,
             "rollout_free_cache_engine": True,
@@ -64,6 +65,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
     assert any(token == f"reward.custom_reward_function.path={reward_path}" for token in command)
     assert any(token == f"actor_rollout_ref.model.path={init_model_path}" for token in command)
     assert any(token == "+actor_rollout_ref.model.override_config._attn_implementation=flash_attention_2" for token in command)
+    assert any(token == "actor_rollout_ref.model.use_remove_padding=false" for token in command)
     assert any(token == "actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes=4096" for token in command)
     assert any(token == "actor_rollout_ref.rollout.tensor_model_parallel_size=2" for token in command)
     assert any(token == "actor_rollout_ref.rollout.free_cache_engine=true" for token in command)

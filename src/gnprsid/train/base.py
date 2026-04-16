@@ -503,6 +503,7 @@ class GRPOVerlBackend(TrainingBackend):
         train_batch_size = int(cfg.get("train_batch_size", 64))
         rollout_n = int(cfg.get("rollout_n", 8))
         tensor_model_parallel_size = int(cfg.get("tensor_model_parallel_size", 1))
+        use_remove_padding = str(bool(cfg.get("use_remove_padding", True))).lower()
         actor_param_offload = str(bool(cfg.get("actor_param_offload", False))).lower()
         actor_optimizer_offload = str(bool(cfg.get("actor_optimizer_offload", False))).lower()
         rollout_free_cache_engine = str(bool(cfg.get("rollout_free_cache_engine", False))).lower()
@@ -523,7 +524,7 @@ class GRPOVerlBackend(TrainingBackend):
             f"data.truncation={cfg.get('truncation', 'error')}",
             f"actor_rollout_ref.model.path={init_model_path}",
             "actor_rollout_ref.model.enable_gradient_checkpointing=true",
-            "actor_rollout_ref.model.use_remove_padding=true",
+            f"actor_rollout_ref.model.use_remove_padding={use_remove_padding}",
             f"actor_rollout_ref.model.lora_rank={int(cfg.get('lora', {}).get('r', 16))}",
             f"actor_rollout_ref.model.lora_alpha={int(cfg.get('lora', {}).get('alpha', 32))}",
             f"actor_rollout_ref.model.target_modules={target_modules_expr}",

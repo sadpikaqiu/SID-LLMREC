@@ -21,6 +21,7 @@ ppo_mini_batch_size: 16
 ppo_micro_batch_size_per_gpu: 1
 log_prob_micro_batch_size_per_gpu: 1
 ref_log_prob_micro_batch_size_per_gpu: 1
+use_remove_padding: false
 rollout_name: vllm
 rollout_n: 4
 gpu_memory_utilization: 0.35

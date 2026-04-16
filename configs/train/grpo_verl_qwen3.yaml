@@ -12,7 +12,7 @@ output_dir: checkpoints/NYC/grpo/qwen3_8b_sid_current
 train_batch_size: 16
 max_prompt_length: 2048
 max_response_length: 256
-attn_implementation: eager
+attn_implementation: flash_attention_2
 update_weights_bucket_megabytes: 3072
 filter_overlong_prompts: true
 truncation: error
@@ -21,7 +21,7 @@ ppo_mini_batch_size: 16
 ppo_micro_batch_size_per_gpu: 1
 log_prob_micro_batch_size_per_gpu: 1
 ref_log_prob_micro_batch_size_per_gpu: 1
-use_remove_padding: false
+use_remove_padding: true
 rollout_name: vllm
 rollout_n: 4
 gpu_memory_utilization: 0.35

@@ -529,7 +529,7 @@ class GRPOVerlBackend(TrainingBackend):
             f"actor_rollout_ref.model.lora_rank={int(cfg.get('lora', {}).get('r', 16))}",
             f"actor_rollout_ref.model.lora_alpha={int(cfg.get('lora', {}).get('alpha', 32))}",
             f"actor_rollout_ref.model.target_modules={target_modules_expr}",
-            f"+actor_rollout_ref.model.override_config._attn_implementation={attn_implementation}",
+            f"actor_rollout_ref.model.override_config.attn_implementation={attn_implementation}",
             f"actor_rollout_ref.actor.optim.lr={float(cfg.get('learning_rate', 1e-6))}",
             f"actor_rollout_ref.actor.ppo_mini_batch_size={int(cfg.get('ppo_mini_batch_size', train_batch_size))}",
             f"actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu={int(cfg.get('ppo_micro_batch_size_per_gpu', 4))}",

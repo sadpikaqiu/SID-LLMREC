@@ -37,6 +37,7 @@ nnodes: 1
 save_freq: 100
 test_freq: 100
 total_epochs: 3
+trainer_use_legacy_worker_impl: enable
 project_name: gnprsid-grpo
 experiment_name: nyc-sid-current-qwen3
 logger: '[console]'

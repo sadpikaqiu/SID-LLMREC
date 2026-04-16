@@ -504,6 +504,7 @@ class GRPOVerlBackend(TrainingBackend):
         rollout_n = int(cfg.get("rollout_n", 8))
         tensor_model_parallel_size = int(cfg.get("tensor_model_parallel_size", 1))
         use_remove_padding = str(bool(cfg.get("use_remove_padding", True))).lower()
+        trainer_use_legacy_worker_impl = str(cfg.get("trainer_use_legacy_worker_impl", "auto"))
         actor_param_offload = str(bool(cfg.get("actor_param_offload", False))).lower()
         actor_optimizer_offload = str(bool(cfg.get("actor_optimizer_offload", False))).lower()
         rollout_free_cache_engine = str(bool(cfg.get("rollout_free_cache_engine", False))).lower()
@@ -561,6 +562,7 @@ class GRPOVerlBackend(TrainingBackend):
             f"trainer.test_freq={int(cfg.get('test_freq', 100))}",
             f"trainer.total_epochs={int(cfg.get('total_epochs', 3))}",
             f"trainer.default_local_dir={output_dir}",
+            f"trainer.use_legacy_worker_impl={trainer_use_legacy_worker_impl}",
             "trainer.resume_mode=disable",
         ]
 

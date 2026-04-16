@@ -33,6 +33,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
             "logger": "[console]",
             "tensor_model_parallel_size": 2,
             "use_remove_padding": False,
+            "trainer_use_legacy_worker_impl": "enable",
             "actor_param_offload": True,
             "actor_optimizer_offload": True,
             "rollout_free_cache_engine": True,
@@ -72,6 +73,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
     assert any(token == "actor_rollout_ref.rollout.enforce_eager=true" for token in command)
     assert any(token == "actor_rollout_ref.actor.fsdp_config.param_offload=true" for token in command)
     assert any(token == "actor_rollout_ref.actor.fsdp_config.optimizer_offload=true" for token in command)
+    assert any(token == "trainer.use_legacy_worker_impl=enable" for token in command)
     assert captured["env"]["GNPRSID_REWARD_TRACE_DIR"] == str(output_dir / "reward_traces")
     assert captured["env"]["GNPRSID_REWARD_TRACE_GROUP_SIZE"] == "512"
     assert captured["check"] is True

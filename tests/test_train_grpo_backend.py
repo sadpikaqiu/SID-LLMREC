@@ -31,6 +31,8 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
             "output_dir": str(output_dir),
             "logger": "[console]",
             "tensor_model_parallel_size": 2,
+            "actor_param_offload": True,
+            "actor_optimizer_offload": True,
             "lora": {
                 "r": 16,
                 "alpha": 32,
@@ -61,6 +63,8 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
     assert any(token == "+actor_rollout_ref.model.override_config._attn_implementation=flash_attention_2" for token in command)
     assert any(token == "actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes=4096" for token in command)
     assert any(token == "actor_rollout_ref.rollout.tensor_model_parallel_size=2" for token in command)
+    assert any(token == "actor_rollout_ref.actor.fsdp_config.param_offload=true" for token in command)
+    assert any(token == "actor_rollout_ref.actor.fsdp_config.optimizer_offload=true" for token in command)
     assert captured["env"]["GNPRSID_REWARD_TRACE_DIR"] == str(output_dir / "reward_traces")
     assert captured["env"]["GNPRSID_REWARD_TRACE_GROUP_SIZE"] == "512"
     assert captured["check"] is True

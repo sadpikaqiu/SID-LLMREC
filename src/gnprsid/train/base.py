@@ -478,6 +478,8 @@ class GRPOVerlBackend(TrainingBackend):
         train_batch_size = int(cfg.get("train_batch_size", 64))
         rollout_n = int(cfg.get("rollout_n", 8))
         tensor_model_parallel_size = int(cfg.get("tensor_model_parallel_size", 1))
+        actor_param_offload = str(bool(cfg.get("actor_param_offload", False))).lower()
+        actor_optimizer_offload = str(bool(cfg.get("actor_optimizer_offload", False))).lower()
         reward_trace_dir = ensure_dir(output_dir / "reward_traces")
 
         command = [
@@ -506,8 +508,8 @@ class GRPOVerlBackend(TrainingBackend):
             f"actor_rollout_ref.actor.kl_loss_coef={float(cfg.get('kl_loss_coef', 0.001))}",
             f"actor_rollout_ref.actor.kl_loss_type={cfg.get('kl_loss_type', 'low_var_kl')}",
             "actor_rollout_ref.actor.entropy_coeff=0",
-            "actor_rollout_ref.actor.fsdp_config.param_offload=false",
-            "actor_rollout_ref.actor.fsdp_config.optimizer_offload=false",
+            f"actor_rollout_ref.actor.fsdp_config.param_offload={actor_param_offload}",
+            f"actor_rollout_ref.actor.fsdp_config.optimizer_offload={actor_optimizer_offload}",
             f"actor_rollout_ref.rollout.name={cfg.get('rollout_name', 'vllm')}",
             f"actor_rollout_ref.rollout.n={rollout_n}",
             f"actor_rollout_ref.rollout.gpu_memory_utilization={float(cfg.get('gpu_memory_utilization', 0.8))}",

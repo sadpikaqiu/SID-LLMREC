@@ -65,6 +65,12 @@ def build_parser() -> argparse.ArgumentParser:
     grpo_inspect = grpo_sub.add_parser("inspect-trace")
     grpo_inspect.add_argument("--trace-path", required=True)
     grpo_inspect.add_argument("--top-k", type=int, default=10)
+    grpo_inspect_sample = grpo_sub.add_parser("inspect-sample")
+    grpo_inspect_sample.add_argument("--train-config", required=True)
+    grpo_inspect_sample.add_argument("--split", default="valid", choices=["train", "valid"])
+    grpo_inspect_sample.add_argument("--sample-id", default=None)
+    grpo_inspect_sample.add_argument("--row-index", type=int, default=0)
+    grpo_inspect_sample.add_argument("--grpo-data-path", default=None)
 
     warmup_parser = subparsers.add_parser("warmup")
     warmup_sub = warmup_parser.add_subparsers(dest="warmup_command", required=True)
@@ -210,9 +216,20 @@ def main() -> None:
 
             result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir)
         else:
-            from gnprsid.grpo.inspect_trace import summarize_reward_traces
+            if args.grpo_command == "inspect-trace":
+                from gnprsid.grpo.inspect_trace import summarize_reward_traces
 
-            result = summarize_reward_traces(trace_path=args.trace_path, top_k=args.top_k)
+                result = summarize_reward_traces(trace_path=args.trace_path, top_k=args.top_k)
+            else:
+                from gnprsid.grpo.inspect_sample import inspect_grpo_sample
+
+                result = inspect_grpo_sample(
+                    train_config_path=args.train_config,
+                    split=args.split,
+                    sample_id=args.sample_id,
+                    row_index=args.row_index,
+                    grpo_data_path=args.grpo_data_path,
+                )
     elif args.command_group == "warmup":
         from gnprsid.warmup.build_data import build_warmup_data
 

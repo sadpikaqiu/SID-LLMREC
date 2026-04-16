@@ -505,6 +505,8 @@ class GRPOVerlBackend(TrainingBackend):
         tensor_model_parallel_size = int(cfg.get("tensor_model_parallel_size", 1))
         actor_param_offload = str(bool(cfg.get("actor_param_offload", False))).lower()
         actor_optimizer_offload = str(bool(cfg.get("actor_optimizer_offload", False))).lower()
+        rollout_free_cache_engine = str(bool(cfg.get("rollout_free_cache_engine", False))).lower()
+        rollout_enforce_eager = str(bool(cfg.get("rollout_enforce_eager", False))).lower()
         reward_trace_dir = ensure_dir(output_dir / "reward_traces")
 
         command = [
@@ -540,6 +542,8 @@ class GRPOVerlBackend(TrainingBackend):
             f"actor_rollout_ref.rollout.gpu_memory_utilization={float(cfg.get('gpu_memory_utilization', 0.8))}",
             f"actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes={update_weights_bucket_megabytes}",
             f"actor_rollout_ref.rollout.tensor_model_parallel_size={tensor_model_parallel_size}",
+            f"actor_rollout_ref.rollout.free_cache_engine={rollout_free_cache_engine}",
+            f"actor_rollout_ref.rollout.enforce_eager={rollout_enforce_eager}",
             f"actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu={int(cfg.get('log_prob_micro_batch_size_per_gpu', 4))}",
             f"actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu={int(cfg.get('ref_log_prob_micro_batch_size_per_gpu', 4))}",
             "actor_rollout_ref.ref.fsdp_config.param_offload=true",

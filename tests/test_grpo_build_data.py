@@ -32,6 +32,14 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
 
     fake_paths = SimpleNamespace(processed=processed, artifacts=artifacts)
     monkeypatch.setattr("gnprsid.grpo.build_data.dataset_paths", lambda dataset: fake_paths)
+    monkeypatch.setattr(
+        "gnprsid.grpo.build_data._load_grpo_tokenizer",
+        lambda model_profile: ({"enable_thinking": False}, object()),
+    )
+    monkeypatch.setattr(
+        "gnprsid.grpo.build_data._render_messages",
+        lambda messages, model_cfg, tokenizer: "rendered-grpo-prompt",
+    )
 
     result = build_grpo_data("NYC")
     train_df = pd.read_parquet(result["train_path"])
@@ -39,9 +47,10 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
 
     assert len(train_df) == 1
     assert len(valid_df) == 1
-    assert list(train_df.columns) == ["data_source", "prompt", "ability", "reward_model", "extra_info"]
+    assert list(train_df.columns) == ["data_source", "prompt", "prompt_messages", "ability", "reward_model", "extra_info"]
     first_prompt = train_df.iloc[0]["prompt"]
-    prompt_items = list(first_prompt)
+    assert first_prompt == "rendered-grpo-prompt"
+    prompt_items = list(train_df.iloc[0]["prompt_messages"])
     assert len(prompt_items) == 2
     assert prompt_items[0]["role"] == "system"
     assert "exactly 10 complete semantic IDs" in prompt_items[0]["content"]
@@ -50,3 +59,4 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
     assert "Start the reply immediately with the first semantic ID." in prompt_items[1]["content"]
     assert train_df.iloc[0]["reward_model"]["ground_truth"] == "<a_1><b_2><c_3>"
     assert train_df.iloc[0]["extra_info"]["prompt_template_version"] == "v3"
+    assert result["model_profile"] == "qwen3-8b-instruct"

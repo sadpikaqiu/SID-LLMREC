@@ -8,7 +8,9 @@ import pandas as pd
 from gnprsid.common.io import ensure_dir, iter_jsonl, write_json
 from gnprsid.common.logging import get_logger
 from gnprsid.common.paths import dataset_paths
-from gnprsid.common.profiles import resolve_project_path
+from gnprsid.common.profiles import load_model_profile, resolve_project_path
+from gnprsid.common.tokenizer import load_tokenizer_with_fallback
+from gnprsid.inference.modeling import render_chat_prompts
 from gnprsid.prompts.render import PROMPT_TEMPLATE_VERSION, build_prompt, system_prompt
 
 
@@ -24,18 +26,51 @@ def _load_rows(path: Path) -> list[dict]:
     return list(iter_jsonl(path))
 
 
-def _to_verl_rows(rows: Iterable[dict]) -> list[dict]:
+def _resolve_chat_template_kwargs(model_cfg: dict) -> dict:
+    kwargs = dict(model_cfg.get("chat_template_kwargs", {}))
+    if "enable_thinking" in model_cfg and "enable_thinking" not in kwargs:
+        kwargs["enable_thinking"] = bool(model_cfg["enable_thinking"])
+    return kwargs
+
+
+def _load_grpo_tokenizer(model_profile: str):
+    try:
+        from transformers import AutoTokenizer
+    except ImportError as error:
+        raise ImportError("Building GRPO data now requires transformers to render chat prompts.") from error
+
+    model_cfg = load_model_profile(model_profile)
+    tokenizer_source = model_cfg.get("tokenizer_name", model_cfg["base_model"])
+    tokenizer = load_tokenizer_with_fallback(
+        AutoTokenizer,
+        tokenizer_source,
+        model_cfg["base_model"],
+    )
+    return model_cfg, tokenizer
+
+
+def _render_messages(messages: list[dict], model_cfg: dict, tokenizer) -> str:
+    return render_chat_prompts(
+        tokenizer,
+        [messages],
+        chat_template_kwargs=_resolve_chat_template_kwargs(model_cfg),
+    )[0]
+
+
+def _to_verl_rows(rows: Iterable[dict], model_cfg: dict, tokenizer) -> list[dict]:
     payload: list[dict] = []
     sys_prompt = system_prompt("sid", "current", candidate_count=10)
     for row in rows:
         user_prompt = build_prompt(row, "current", candidate_count=10)
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
         payload.append(
             {
                 "data_source": GRPO_DATA_SOURCE,
-                "prompt": [
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                "prompt": _render_messages(messages, model_cfg, tokenizer),
+                "prompt_messages": messages,
                 "ability": GRPO_ABILITY,
                 "reward_model": {
                     "style": "rule",
@@ -58,17 +93,19 @@ def _to_verl_rows(rows: Iterable[dict]) -> list[dict]:
 def build_grpo_data(
     dataset: str = "NYC",
     output_dir: str | Path | None = None,
+    model_profile: str = "qwen3-8b-instruct",
 ) -> dict:
     paths = dataset_paths(dataset)
     source_dir = paths.processed
     output_dir = resolve_project_path(output_dir) if output_dir else (paths.artifacts / "grpo" / "sid" / "current")
     output_dir = ensure_dir(output_dir)
+    model_cfg, tokenizer = _load_grpo_tokenizer(model_profile)
 
     train_rows = _load_rows(source_dir / "samples_sid_train.jsonl")
     valid_rows = _load_rows(source_dir / "samples_sid_val.jsonl")
 
-    train_payload = _to_verl_rows(train_rows)
-    valid_payload = _to_verl_rows(valid_rows)
+    train_payload = _to_verl_rows(train_rows, model_cfg, tokenizer)
+    valid_payload = _to_verl_rows(valid_rows, model_cfg, tokenizer)
 
     train_path = output_dir / "train.parquet"
     valid_path = output_dir / "valid.parquet"
@@ -81,6 +118,7 @@ def build_grpo_data(
         "history_source": "current",
         "data_source": GRPO_DATA_SOURCE,
         "ability": GRPO_ABILITY,
+        "model_profile": model_profile,
         "prompt_template_version": PROMPT_TEMPLATE_VERSION,
         "train_path": str(train_path),
         "valid_path": str(valid_path),

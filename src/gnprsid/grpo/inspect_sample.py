@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from gnprsid.grpo.reward_current_top10 import compute_score
 from gnprsid.inference.modeling import (
     _resolve_chat_template_kwargs,
     generate_from_messages,
+    generate_from_raw_prompts,
     load_generation_model,
     render_chat_prompts,
 )
@@ -22,6 +24,17 @@ def _load_grpo_rows(grpo_path: Path) -> list[dict[str, Any]]:
     if not grpo_path.exists():
         raise FileNotFoundError(f"Missing GRPO parquet: {grpo_path}")
     return pd.read_parquet(grpo_path).to_dict(orient="records")
+
+
+def _is_message_batch(value: Any) -> bool:
+    if isinstance(value, (str, bytes)):
+        return False
+    if not isinstance(value, Iterable):
+        return False
+    items = list(value)
+    if len(items) == 0:
+        return False
+    return all(isinstance(item, dict) and "role" in item and "content" in item for item in items)
 
 
 def inspect_grpo_sample(
@@ -66,21 +79,35 @@ def inspect_grpo_sample(
         checkpoint_path=checkpoint_path,
     )
 
-    messages = list(row["prompt"])
-    rendered_prompt = render_chat_prompts(
-        tokenizer,
-        [messages],
-        chat_template_kwargs=_resolve_chat_template_kwargs(model_cfg),
-    )[0]
-    prediction = generate_from_messages(
-        model_cfg,
-        tokenizer,
-        model,
-        [messages],
-        batch_size=1,
-        allowed_completions=None,
-        top_k_sequences=10,
-    )[0]
+    prompt_payload = row["prompt"]
+    if _is_message_batch(prompt_payload):
+        messages = list(prompt_payload)
+        rendered_prompt = render_chat_prompts(
+            tokenizer,
+            [messages],
+            chat_template_kwargs=_resolve_chat_template_kwargs(model_cfg),
+        )[0]
+        prediction = generate_from_messages(
+            model_cfg,
+            tokenizer,
+            model,
+            [messages],
+            batch_size=1,
+            allowed_completions=None,
+            top_k_sequences=10,
+        )[0]
+    else:
+        messages = list(row.get("prompt_messages", []))
+        rendered_prompt = str(prompt_payload)
+        prediction = generate_from_raw_prompts(
+            model_cfg,
+            tokenizer,
+            model,
+            [rendered_prompt],
+            batch_size=1,
+            allowed_completions=None,
+            top_k_sequences=10,
+        )[0]
 
     parsed_predictions = extract_predictions(prediction, "sid")
     reward = compute_score(

@@ -62,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     grpo_build = grpo_sub.add_parser("build-data")
     grpo_build.add_argument("--dataset", default="NYC")
     grpo_build.add_argument("--output-dir", default=None)
+    grpo_build.add_argument("--model-profile", default="qwen3-8b-instruct")
     grpo_inspect = grpo_sub.add_parser("inspect-trace")
     grpo_inspect.add_argument("--trace-path", required=True)
     grpo_inspect.add_argument("--top-k", type=int, default=10)
@@ -214,7 +215,7 @@ def main() -> None:
         if args.grpo_command == "build-data":
             from gnprsid.grpo.build_data import build_grpo_data
 
-            result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir)
+            result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir, model_profile=args.model_profile)
         else:
             if args.grpo_command == "inspect-trace":
                 from gnprsid.grpo.inspect_trace import summarize_reward_traces

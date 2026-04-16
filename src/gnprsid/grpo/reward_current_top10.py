@@ -39,7 +39,7 @@ def _preview_text(text: str, limit: int = 240) -> str:
     normalized = " ".join(text.strip().split())
     if len(normalized) <= limit:
         return normalized
-    return normalized[: limit - 1] + "…"
+    return normalized[: limit - 3] + "..."
 
 
 def _common_prefix_depth(prediction: str, target: str) -> int:

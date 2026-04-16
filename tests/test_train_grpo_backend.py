@@ -24,7 +24,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
             "stage": "grpo",
             "backend": "verl",
             "dataset": "NYC",
-            "model_profile": "qwen2.5-7b-instruct",
+            "model_profile": "qwen3-8b-instruct",
             "train_path": str(train_path),
             "valid_path": str(valid_path),
             "init_model_path": str(init_model_path),
@@ -63,6 +63,7 @@ def test_run_training_stage_grpo_builds_verl_command(monkeypatch, tmp_path):
     assert command[:3] == ["python", "-m", "verl.trainer.main_ppo"] or command[1:3] == ["-m", "verl.trainer.main_ppo"]
     assert any(token == "algorithm.adv_estimator=grpo" for token in command)
     assert any(token == f"data.train_files={train_path}" for token in command)
+    assert any(token == "++data.apply_chat_template_kwargs.enable_thinking=false" for token in command)
     assert any(token == f"reward.custom_reward_function.path={reward_path}" for token in command)
     assert any(token == f"actor_rollout_ref.model.path={init_model_path}" for token in command)
     assert any(token == "+actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2" for token in command)
@@ -130,7 +131,7 @@ def test_run_training_stage_grpo_attempts_cleanup_after_failure(monkeypatch, tmp
             "stage": "grpo",
             "backend": "verl",
             "dataset": "NYC",
-            "model_profile": "qwen2.5-7b-instruct",
+            "model_profile": "qwen3-8b-instruct",
             "train_path": str(train_path),
             "valid_path": str(valid_path),
             "init_model_path": str(init_model_path),

@@ -32,15 +32,6 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
 
     fake_paths = SimpleNamespace(processed=processed, artifacts=artifacts)
     monkeypatch.setattr("gnprsid.grpo.build_data.dataset_paths", lambda dataset: fake_paths)
-    monkeypatch.setattr(
-        "gnprsid.grpo.build_data._load_grpo_tokenizer",
-        lambda model_profile: ({"enable_thinking": False}, object()),
-    )
-    monkeypatch.setattr(
-        "gnprsid.grpo.build_data._render_messages",
-        lambda messages, model_cfg, tokenizer: "rendered-grpo-prompt",
-    )
-
     result = build_grpo_data("NYC")
     train_df = pd.read_parquet(result["train_path"])
     valid_df = pd.read_parquet(result["valid_path"])
@@ -48,8 +39,9 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
     assert len(train_df) == 1
     assert len(valid_df) == 1
     assert list(train_df.columns) == ["data_source", "prompt", "prompt_messages", "ability", "reward_model", "extra_info"]
-    first_prompt = train_df.iloc[0]["prompt"]
-    assert first_prompt == "rendered-grpo-prompt"
+    first_prompt = list(train_df.iloc[0]["prompt"])
+    assert len(first_prompt) == 2
+    assert first_prompt[0]["role"] == "system"
     prompt_items = list(train_df.iloc[0]["prompt_messages"])
     assert len(prompt_items) == 2
     assert prompt_items[0]["role"] == "system"

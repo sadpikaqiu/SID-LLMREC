@@ -130,6 +130,21 @@ def _resolve_training_model_source(source: str | Path) -> str:
     return str(source)
 
 
+def _serialize_hydra_scalar(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _resolve_chat_template_kwargs(model_profile: dict[str, Any]) -> dict[str, Any]:
+    kwargs = dict(model_profile.get("chat_template_kwargs", {}))
+    if "enable_thinking" in model_profile and "enable_thinking" not in kwargs:
+        kwargs["enable_thinking"] = bool(model_profile["enable_thinking"])
+    return kwargs
+
+
 def _requested_num_processes(cfg: dict[str, Any]) -> int:
     return int(cfg.get("num_processes", 1))
 
@@ -510,6 +525,7 @@ class GRPOVerlBackend(TrainingBackend):
         rollout_free_cache_engine = str(bool(cfg.get("rollout_free_cache_engine", False))).lower()
         rollout_enforce_eager = str(bool(cfg.get("rollout_enforce_eager", False))).lower()
         reward_trace_dir = ensure_dir(output_dir / "reward_traces")
+        chat_template_kwargs = _resolve_chat_template_kwargs(prepared["resolved_model_profile"])
 
         command = [
             sys.executable,
@@ -565,6 +581,11 @@ class GRPOVerlBackend(TrainingBackend):
             f"trainer.use_legacy_worker_impl={trainer_use_legacy_worker_impl}",
             "trainer.resume_mode=disable",
         ]
+        for key, value in chat_template_kwargs.items():
+            serialized = _serialize_hydra_scalar(value)
+            if serialized is None:
+                continue
+            command.append(f"++data.apply_chat_template_kwargs.{key}={serialized}")
 
         logger.info("Running verl command: %s", " ".join(str(token) for token in command))
         env = os.environ.copy()

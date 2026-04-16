@@ -35,6 +35,13 @@ def _is_single_line_output(solution_str: str) -> bool:
     return "\n" not in stripped and "\r" not in stripped
 
 
+def _preview_text(text: str, limit: int = 240) -> str:
+    normalized = " ".join(text.strip().split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1] + "…"
+
+
 def _common_prefix_depth(prediction: str, target: str) -> int:
     prediction_tokens = re.findall(SID_TOKEN_PATTERN, prediction)
     target_tokens = re.findall(SID_TOKEN_PATTERN, target)
@@ -90,6 +97,9 @@ def compute_score(
     append_reward_trace(
         extra_info,
         {
+            "solution_preview": _preview_text(solution_str),
+            "solution_char_length": len(solution_str),
+            "parsed_predictions": parsed_predictions,
             "single_line_score": single_line_score,
             "valid_count_score": valid_count_score,
             "exact_ten_score": exact_ten_score,

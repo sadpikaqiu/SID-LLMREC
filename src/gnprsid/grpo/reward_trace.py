@@ -17,6 +17,10 @@ _LOCAL_RECORD_COUNTER = count()
 def _coerce_trace_value(value: Any) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
+    if isinstance(value, Mapping):
+        return {str(key): _coerce_trace_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_coerce_trace_value(item) for item in value]
     return str(value)
 
 

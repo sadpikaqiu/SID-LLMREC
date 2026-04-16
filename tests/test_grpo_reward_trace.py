@@ -29,6 +29,8 @@ def test_reward_trace_logging_writes_jsonl(monkeypatch, tmp_path):
     assert rows[0]["total_reward"] == score
     assert rows[0]["soft_hit_reward"] == 1.0
     assert rows[0]["format_reward"] > 0.0
+    assert rows[0]["solution_preview"] == "<a_1><b_2><c_3> <a_4><b_5><c_6>"
+    assert rows[0]["parsed_predictions"] == ["<a_1><b_2><c_3>", "<a_4><b_5><c_6>"]
 
 
 def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
@@ -113,3 +115,40 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
     assert "Synthetic Step" in html_report
     assert "Mean Reward" in html_report
     assert "Cumulative Total Reward" in html_report
+
+
+def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):
+    from gnprsid.grpo.inspect_trace import summarize_reward_traces
+
+    trace_dir = tmp_path / "reward-traces"
+    trace_dir.mkdir()
+    trace_path = trace_dir / "reward_trace_pid1.jsonl"
+    rows = [
+        {
+            "solution_preview": "<eos>",
+            "parsed_prediction_count": 0,
+            "single_line_score": 1.0,
+            "total_reward": 0.2,
+        },
+        {
+            "solution_preview": "<eos>",
+            "parsed_prediction_count": 0,
+            "single_line_score": 1.0,
+            "total_reward": 0.2,
+        },
+        {
+            "solution_preview": "<a_1><b_2><c_3>",
+            "parsed_prediction_count": 1,
+            "single_line_score": 1.0,
+            "total_reward": 1.8,
+        },
+    ]
+    trace_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    summary = summarize_reward_traces(trace_dir, top_k=2)
+
+    assert summary["trace_row_count"] == 3
+    assert summary["zero_prediction_rate"] == 2 / 3
+    assert summary["parsed_prediction_count_histogram"] == {0: 2, 1: 1}
+    assert summary["top_solution_previews"][0]["solution_preview"] == "<eos>"
+    assert summary["top_solution_previews"][0]["count"] == 2

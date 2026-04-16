@@ -62,6 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     grpo_build = grpo_sub.add_parser("build-data")
     grpo_build.add_argument("--dataset", default="NYC")
     grpo_build.add_argument("--output-dir", default=None)
+    grpo_inspect = grpo_sub.add_parser("inspect-trace")
+    grpo_inspect.add_argument("--trace-path", required=True)
+    grpo_inspect.add_argument("--top-k", type=int, default=10)
 
     warmup_parser = subparsers.add_parser("warmup")
     warmup_sub = warmup_parser.add_subparsers(dest="warmup_command", required=True)
@@ -202,9 +205,14 @@ def main() -> None:
             )
             display_result = result["metrics"]
     elif args.command_group == "grpo":
-        from gnprsid.grpo.build_data import build_grpo_data
+        if args.grpo_command == "build-data":
+            from gnprsid.grpo.build_data import build_grpo_data
 
-        result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir)
+            result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir)
+        else:
+            from gnprsid.grpo.inspect_trace import summarize_reward_traces
+
+            result = summarize_reward_traces(trace_path=args.trace_path, top_k=args.top_k)
     elif args.command_group == "warmup":
         from gnprsid.warmup.build_data import build_warmup_data
 

@@ -29,7 +29,7 @@ actor_optimizer_offload: true
 rollout_free_cache_engine: true
 kl_loss_coef: 0.001
 kl_loss_type: low_var_kl
-n_gpus_per_node: 8                  # 这是最关键的
+n_gpus_per_node: 4                  # 这是最关键的
 nnodes: 1
 save_freq: 100
 test_freq: 100

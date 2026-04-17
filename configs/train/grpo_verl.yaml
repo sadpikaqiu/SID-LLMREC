@@ -4,48 +4,40 @@ dataset: NYC
 model_profile: qwen2.5-7b-instruct
 history_source: current
 repr: sid
-
 train_path: artifacts/NYC/grpo/sid/current/train.parquet
 valid_path: artifacts/NYC/grpo/sid/current/valid.parquet
 init_model_path: checkpoints/NYC/warmup/qwen25_7b_sid_current/merged_final
 reward_function_path: src/gnprsid/grpo/reward_current_top10.py
 output_dir: checkpoints/NYC/grpo/qwen25_7b_sid_current
-
 train_batch_size: 8                 # 先从16降到8
 max_prompt_length: 2048             # 先别上2048
 max_response_length: 256
-
 attn_implementation: flash_attention_2
-update_weights_bucket_megabytes: 4096
-filter_overlong_prompts: true
+update_weights_bucket_megabytes: 3072
 truncation: error
-
 learning_rate: 1.0e-6
-
 ppo_mini_batch_size: 8
 ppo_micro_batch_size_per_gpu: 1
 log_prob_micro_batch_size_per_gpu: 1
 ref_log_prob_micro_batch_size_per_gpu: 1
-
 rollout_name: vllm
 rollout_n: 4                        # 从4降到2
-tensor_model_parallel_size: 8
-gpu_memory_utilization: 0.4
+tensor_model_parallel_size: 2
+gpu_memory_utilization: 0.6
 actor_param_offload: true
 actor_optimizer_offload: true
 rollout_free_cache_engine: true
-
-
+kl_loss_coef: 0.001
+kl_loss_type: low_var_kl
 n_gpus_per_node: 8                  # 这是最关键的
 nnodes: 1
-
 save_freq: 100
 test_freq: 100
 total_epochs: 3
+trainer_use_legacy_worker_impl: enable
 project_name: gnprsid-grpo
 experiment_name: nyc-sid-current
 logger: "[console]"
-
 lora:
   r: 16
   alpha: 32

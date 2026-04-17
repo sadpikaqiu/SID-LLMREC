@@ -29,8 +29,8 @@ ref_log_prob_micro_batch_size_per_gpu: 1
 
 rollout_name: vllm
 rollout_n: 4                        # 从4降到2
-tensor_model_parallel_size: 2
-gpu_memory_utilization: 0.5
+tensor_model_parallel_size: 8
+gpu_memory_utilization: 0.4
 enable_chunked_prefill: true
 free_cache_engine: true
 

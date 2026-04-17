@@ -31,17 +31,10 @@ rollout_name: vllm
 rollout_n: 4                        # 从4降到2
 tensor_model_parallel_size: 8
 gpu_memory_utilization: 0.4
-enable_chunked_prefill: true
-free_cache_engine: true
+actor_param_offload: true
+actor_optimizer_offload: true
+rollout_free_cache_engine: true
 
-enable_gradient_checkpointing: true
-entropy_checkpointing: true
-use_remove_padding: true
-
-use_kl_loss: true
-kl_loss_coef: 0.001
-kl_loss_type: low_var_kl
-use_kl_in_reward: false
 
 n_gpus_per_node: 8                  # 这是最关键的
 nnodes: 1

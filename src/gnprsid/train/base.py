@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import sys
-from importlib.util import find_spec
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +21,8 @@ from gnprsid.common.tokenizer import build_tokenizer_load_kwargs
 logger = get_logger(__name__)
 
 TORCHRUN_SKIP_MANIFEST_ENV = "GNPRSID_SKIP_MANIFEST_WRITE"
+MS_SWIFT_REWARD_PATH_ENV = "GNPRSID_GRPO_REWARD_PATH"
+MS_SWIFT_REWARD_NAME_ENV = "GNPRSID_GRPO_REWARD_NAME"
 
 
 @dataclass
@@ -128,14 +129,6 @@ def _resolve_training_model_source(source: str | Path) -> str:
         raise FileNotFoundError(f"Missing local model path: {project_candidate}")
 
     return str(source)
-
-
-def _serialize_hydra_scalar(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return str(value).lower()
-    return str(value)
 
 
 def _resolve_chat_template_kwargs(model_profile: dict[str, Any]) -> dict[str, Any]:
@@ -245,6 +238,40 @@ def _cleanup_grpo_runtime_processes() -> list[list[str]]:
         except OSError as error:
             logger.warning("Failed to execute cleanup command %s: %s", " ".join(cleanup_command), error)
     return attempted
+
+
+def _prepend_pythonpath(env: dict[str, str], extra_path: Path) -> None:
+    existing = env.get("PYTHONPATH", "")
+    extra = str(extra_path)
+    env["PYTHONPATH"] = extra if not existing else extra + os.pathsep + existing
+
+
+def _normalize_ms_swift_attn_impl(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"flash_attention_2", "flash-attention-2", "flash_attention2"}:
+        return "flash_attn"
+    return normalized
+
+
+def _validate_ms_swift_grpo_shape(cfg: dict[str, Any]) -> None:
+    num_processes = int(cfg.get("n_gpus_per_node", 1)) * int(cfg.get("nnodes", 1))
+    per_device_train_batch_size = int(cfg.get("per_device_train_batch_size", 1))
+    per_device_eval_batch_size = int(cfg.get("per_device_eval_batch_size", per_device_train_batch_size))
+    gradient_accumulation_steps = int(cfg.get("gradient_accumulation_steps", 1))
+    num_generations = int(cfg.get("num_generations", 8))
+
+    global_train_batch = per_device_train_batch_size * gradient_accumulation_steps * num_processes
+    global_eval_batch = per_device_eval_batch_size * num_processes
+    if global_train_batch % num_generations != 0:
+        raise ValueError(
+            "ms-swift GRPO requires global train batch size divisible by num_generations: "
+            f"{global_train_batch=} {num_generations=}"
+        )
+    if global_eval_batch % num_generations != 0:
+        raise ValueError(
+            "ms-swift GRPO requires global eval batch size divisible by num_generations: "
+            f"{global_eval_batch=} {num_generations=}"
+        )
 
 
 @register_backend
@@ -484,113 +511,132 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
 
 
 @register_backend
-class GRPOVerlBackend(TrainingBackend):
+class GRPOMsSwiftBackend(TrainingBackend):
     stage = "grpo"
-    backend_name = "verl"
+    backend_name = "ms-swift"
 
     def run(self, context: TrainContext, prepared: dict[str, Any]) -> dict[str, Any]:
-        if find_spec("verl") is None:
-            raise ImportError("GRPO training requires the official 'verl' package to be installed.")
-
         cfg = context.stage_config
         output_dir = ensure_dir(context.output_dir)
+        swift_cli = shutil.which("swift")
+        if not swift_cli:
+            raise FileNotFoundError("Could not find 'swift'. Install ms-swift in the Linux training environment first.")
 
         train_path = resolve_project_path(cfg["train_path"])
         valid_path = resolve_project_path(cfg["valid_path"])
         init_model_path = resolve_project_path(cfg["init_model_path"])
         reward_path = resolve_project_path(cfg["reward_function_path"])
+        plugin_path = resolve_project_path("src/gnprsid/grpo/ms_swift_plugin.py")
         if not train_path.exists():
-            raise FileNotFoundError(f"Missing GRPO train parquet: {train_path}")
+            raise FileNotFoundError(f"Missing GRPO train dataset: {train_path}")
         if not valid_path.exists():
-            raise FileNotFoundError(f"Missing GRPO valid parquet: {valid_path}")
+            raise FileNotFoundError(f"Missing GRPO valid dataset: {valid_path}")
         if not init_model_path.exists():
             raise FileNotFoundError(f"Missing GRPO init model path: {init_model_path}")
         if not reward_path.exists():
             raise FileNotFoundError(f"Missing GRPO reward function file: {reward_path}")
+        if not plugin_path.exists():
+            raise FileNotFoundError(f"Missing ms-swift reward plugin file: {plugin_path}")
 
-        target_modules = cfg.get("lora", {}).get(
-            "target_modules",
-            ["q_proj", "k_proj", "v_proj", "gate_proj", "up_proj"],
+        _validate_ms_swift_grpo_shape(cfg)
+
+        model_cfg = prepared["resolved_model_profile"]
+        target_modules = list(
+            cfg.get("lora", {}).get(
+                "target_modules",
+                ["q_proj", "k_proj", "v_proj", "gate_proj", "up_proj"],
+            )
         )
-        target_modules_expr = "[" + ",".join(str(module) for module in target_modules) + "]"
-        attn_implementation = str(cfg.get("attn_implementation", "flash_attention_2"))
-        update_weights_bucket_megabytes = int(cfg.get("update_weights_bucket_megabytes", 4096))
-        train_batch_size = int(cfg.get("train_batch_size", 64))
-        rollout_n = int(cfg.get("rollout_n", 8))
-        tensor_model_parallel_size = int(cfg.get("tensor_model_parallel_size", 1))
-        use_remove_padding = str(bool(cfg.get("use_remove_padding", True))).lower()
-        trainer_use_legacy_worker_impl = str(cfg.get("trainer_use_legacy_worker_impl", "auto"))
-        actor_param_offload = str(bool(cfg.get("actor_param_offload", False))).lower()
-        actor_optimizer_offload = str(bool(cfg.get("actor_optimizer_offload", False))).lower()
-        rollout_free_cache_engine = str(bool(cfg.get("rollout_free_cache_engine", False))).lower()
-        rollout_enforce_eager = str(bool(cfg.get("rollout_enforce_eager", False))).lower()
+        enable_thinking = _resolve_chat_template_kwargs(model_cfg).get("enable_thinking")
+        offload_model = bool(cfg.get("offload_model", cfg.get("actor_param_offload", False)))
+        offload_optimizer = bool(cfg.get("offload_optimizer", cfg.get("actor_optimizer_offload", False)))
         reward_trace_dir = ensure_dir(output_dir / "reward_traces")
-        chat_template_kwargs = _resolve_chat_template_kwargs(prepared["resolved_model_profile"])
+        ms_swift_config = {
+            "rlhf_type": "grpo",
+            "model": str(init_model_path),
+            "train_type": "lora",
+            "dataset": [str(train_path)],
+            "val_dataset": [str(valid_path)],
+            "split_dataset_ratio": 0,
+            "output_dir": str(output_dir),
+            "add_version": False,
+            "external_plugins": [str(plugin_path)],
+            "reward_funcs": ["gnprsid_top10"],
+            "torch_dtype": str(model_cfg.get("dtype", "bfloat16")),
+            "attn_impl": _normalize_ms_swift_attn_impl(str(cfg.get("attn_impl", cfg.get("attn_implementation", "flash_attn")))),
+            "max_length": int(cfg.get("max_length", cfg.get("max_prompt_length", 2048))),
+            "max_completion_length": int(cfg.get("max_completion_length", cfg.get("max_response_length", 256))),
+            "num_generations": int(cfg.get("num_generations", cfg.get("rollout_n", 8))),
+            "per_device_train_batch_size": int(cfg.get("per_device_train_batch_size", 1)),
+            "per_device_eval_batch_size": int(cfg.get("per_device_eval_batch_size", cfg.get("per_device_train_batch_size", 1))),
+            "gradient_accumulation_steps": int(cfg.get("gradient_accumulation_steps", 1)),
+            "learning_rate": float(cfg.get("learning_rate", 1e-6)),
+            "num_train_epochs": float(cfg.get("num_train_epochs", cfg.get("total_epochs", 3))),
+            "beta": float(cfg.get("beta", cfg.get("kl_loss_coef", 0.001))),
+            "temperature": float(cfg.get("temperature", 1.0)),
+            "top_p": float(cfg.get("top_p", 0.85)),
+            "logging_steps": int(cfg.get("logging_steps", 10)),
+            "save_steps": int(cfg.get("save_steps", cfg.get("save_freq", 100))),
+            "eval_steps": int(cfg.get("eval_steps", cfg.get("test_freq", 100))),
+            "save_strategy": "steps",
+            "eval_strategy": "steps",
+            "save_total_limit": int(cfg.get("save_total_limit", 2)),
+            "report_to": str(cfg.get("report_to", "none")),
+            "run_name": str(cfg.get("experiment_name", "gnprsid-grpo")),
+            "use_vllm": bool(cfg.get("use_vllm", True)),
+            "vllm_mode": str(cfg.get("vllm_mode", "colocate")),
+            "vllm_gpu_memory_utilization": float(
+                cfg.get("vllm_gpu_memory_utilization", cfg.get("gpu_memory_utilization", 0.6))
+            ),
+            "vllm_tensor_parallel_size": int(
+                cfg.get("vllm_tensor_parallel_size", cfg.get("tensor_model_parallel_size", 1))
+            ),
+            "vllm_max_model_len": int(
+                cfg.get(
+                    "vllm_max_model_len",
+                    int(cfg.get("max_length", cfg.get("max_prompt_length", 2048)))
+                    + int(cfg.get("max_completion_length", cfg.get("max_response_length", 256))),
+                )
+            ),
+            "sleep_level": int(cfg.get("sleep_level", 1)),
+            "offload_model": offload_model,
+            "offload_optimizer": offload_optimizer,
+            "gc_collect_after_offload": bool(cfg.get("gc_collect_after_offload", offload_model or offload_optimizer)),
+            "deepspeed": str(cfg.get("deepspeed", "zero2")),
+            "packing": bool(cfg.get("packing", False)),
+            "log_completions": bool(cfg.get("log_completions", True)),
+            "dataloader_num_workers": int(cfg.get("dataloader_num_workers", 4)),
+            "dataset_num_proc": int(cfg.get("dataset_num_proc", 4)),
+            "lora_rank": int(cfg.get("lora", {}).get("r", 16)),
+            "lora_alpha": int(cfg.get("lora", {}).get("alpha", 32)),
+            "target_modules": target_modules,
+        }
+        if enable_thinking is not None:
+            ms_swift_config["enable_thinking"] = bool(enable_thinking)
+            if not enable_thinking:
+                ms_swift_config["add_non_thinking_prefix"] = True
+                ms_swift_config["loss_scale"] = str(cfg.get("loss_scale", "last_round+ignore_empty_think"))
+        if cfg.get("warmup_ratio") is not None:
+            ms_swift_config["warmup_ratio"] = float(cfg["warmup_ratio"])
 
-        command = [
-            sys.executable,
-            "-m",
-            "verl.trainer.main_ppo",
-            "algorithm.adv_estimator=grpo",
-            f"data.train_files={train_path}",
-            f"data.val_files={valid_path}",
-            f"data.train_batch_size={train_batch_size}",
-            f"data.max_prompt_length={int(cfg.get('max_prompt_length', 2048))}",
-            f"data.max_response_length={int(cfg.get('max_response_length', 256))}",
-            f"data.filter_overlong_prompts={str(bool(cfg.get('filter_overlong_prompts', True))).lower()}",
-            f"data.truncation={cfg.get('truncation', 'error')}",
-            f"actor_rollout_ref.model.path={init_model_path}",
-            "actor_rollout_ref.model.enable_gradient_checkpointing=true",
-            f"actor_rollout_ref.model.use_remove_padding={use_remove_padding}",
-            f"actor_rollout_ref.model.lora_rank={int(cfg.get('lora', {}).get('r', 16))}",
-            f"actor_rollout_ref.model.lora_alpha={int(cfg.get('lora', {}).get('alpha', 32))}",
-            f"actor_rollout_ref.model.target_modules={target_modules_expr}",
-            f"+actor_rollout_ref.model.override_config.attn_implementation={attn_implementation}",
-            f"actor_rollout_ref.actor.optim.lr={float(cfg.get('learning_rate', 1e-6))}",
-            f"actor_rollout_ref.actor.ppo_mini_batch_size={int(cfg.get('ppo_mini_batch_size', train_batch_size))}",
-            f"actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu={int(cfg.get('ppo_micro_batch_size_per_gpu', 4))}",
-            "actor_rollout_ref.actor.use_kl_loss=true",
-            f"actor_rollout_ref.actor.kl_loss_coef={float(cfg.get('kl_loss_coef', 0.001))}",
-            f"actor_rollout_ref.actor.kl_loss_type={cfg.get('kl_loss_type', 'low_var_kl')}",
-            "actor_rollout_ref.actor.entropy_coeff=0",
-            f"actor_rollout_ref.actor.fsdp_config.param_offload={actor_param_offload}",
-            f"actor_rollout_ref.actor.fsdp_config.optimizer_offload={actor_optimizer_offload}",
-            f"actor_rollout_ref.rollout.name={cfg.get('rollout_name', 'vllm')}",
-            f"actor_rollout_ref.rollout.n={rollout_n}",
-            f"actor_rollout_ref.rollout.gpu_memory_utilization={float(cfg.get('gpu_memory_utilization', 0.8))}",
-            f"actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes={update_weights_bucket_megabytes}",
-            f"actor_rollout_ref.rollout.tensor_model_parallel_size={tensor_model_parallel_size}",
-            f"actor_rollout_ref.rollout.free_cache_engine={rollout_free_cache_engine}",
-            f"actor_rollout_ref.rollout.enforce_eager={rollout_enforce_eager}",
-            f"actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu={int(cfg.get('log_prob_micro_batch_size_per_gpu', 4))}",
-            f"actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu={int(cfg.get('ref_log_prob_micro_batch_size_per_gpu', 4))}",
-            "actor_rollout_ref.ref.fsdp_config.param_offload=true",
-            "algorithm.use_kl_in_reward=false",
-            "trainer.critic_warmup=0",
-            f"trainer.logger={cfg.get('logger', '[console]')}",
-            f"reward.custom_reward_function.path={reward_path}",
-            f"reward.custom_reward_function.name={cfg.get('reward_function_name', 'compute_score')}",
-            f"trainer.project_name={cfg.get('project_name', 'gnprsid-grpo')}",
-            f"trainer.experiment_name={cfg.get('experiment_name', 'nyc-sid-current')}",
-            f"trainer.n_gpus_per_node={int(cfg.get('n_gpus_per_node', 1))}",
-            f"trainer.nnodes={int(cfg.get('nnodes', 1))}",
-            f"trainer.save_freq={int(cfg.get('save_freq', 100))}",
-            f"trainer.test_freq={int(cfg.get('test_freq', 100))}",
-            f"trainer.total_epochs={int(cfg.get('total_epochs', 3))}",
-            f"trainer.default_local_dir={output_dir}",
-            f"trainer.use_legacy_worker_impl={trainer_use_legacy_worker_impl}",
-            "trainer.resume_mode=disable",
-        ]
-        for key, value in chat_template_kwargs.items():
-            serialized = _serialize_hydra_scalar(value)
-            if serialized is None:
-                continue
-            command.append(f"++data.apply_chat_template_kwargs.{key}={serialized}")
+        ms_swift_config_path = output_dir / "ms_swift_grpo.yaml"
+        dump_yaml(ms_swift_config_path, ms_swift_config)
 
-        logger.info("Running verl command: %s", " ".join(str(token) for token in command))
+        command = [swift_cli, "rlhf", "--config", str(ms_swift_config_path)]
+        logger.info("Running ms-swift command: %s", " ".join(str(token) for token in command))
         env = os.environ.copy()
+        _prepend_pythonpath(env, project_root() / "src")
         env[TRACE_DIR_ENV] = str(reward_trace_dir)
-        env[TRACE_GROUP_SIZE_ENV] = str(train_batch_size * rollout_n)
+        env[TRACE_GROUP_SIZE_ENV] = str(ms_swift_config["num_generations"])
+        env[MS_SWIFT_REWARD_PATH_ENV] = str(reward_path)
+        env[MS_SWIFT_REWARD_NAME_ENV] = str(cfg.get("reward_function_name", "compute_score"))
+        env["NPROC_PER_NODE"] = str(int(cfg.get("n_gpus_per_node", 1)))
+        env["NNODES"] = str(int(cfg.get("nnodes", 1)))
+        env["NODE_RANK"] = str(int(cfg.get("node_rank", 0)))
+        env["MASTER_ADDR"] = str(cfg.get("master_addr", "127.0.0.1"))
+        env["MASTER_PORT"] = str(int(cfg.get("master_port", 29500)))
+        if ms_swift_config["report_to"] == "wandb" and cfg.get("project_name"):
+            env["WANDB_PROJECT"] = str(cfg["project_name"])
         try:
             subprocess.run(command, check=True, env=env)
         except subprocess.CalledProcessError:
@@ -607,6 +653,8 @@ class GRPOVerlBackend(TrainingBackend):
             "init_model_path": str(init_model_path),
             "reward_function_path": str(reward_path),
             "reward_trace_dir": str(reward_trace_dir),
+            "ms_swift_config_path": str(ms_swift_config_path),
+            "plugin_path": str(plugin_path),
             "command": [str(token) for token in command],
             "output_dir": str(output_dir),
         }

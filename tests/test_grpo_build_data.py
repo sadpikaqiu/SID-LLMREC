@@ -1,13 +1,10 @@
-from pathlib import Path
 from types import SimpleNamespace
 
-import pandas as pd
-
-from gnprsid.common.io import write_jsonl
+from gnprsid.common.io import iter_jsonl, write_jsonl
 from gnprsid.grpo.build_data import build_grpo_data
 
 
-def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
+def test_build_grpo_data_writes_ms_swift_jsonl(monkeypatch, tmp_path):
     processed = tmp_path / "processed"
     artifacts = tmp_path / "artifacts"
     processed.mkdir()
@@ -32,23 +29,33 @@ def test_build_grpo_data_writes_verl_parquet(monkeypatch, tmp_path):
 
     fake_paths = SimpleNamespace(processed=processed, artifacts=artifacts)
     monkeypatch.setattr("gnprsid.grpo.build_data.dataset_paths", lambda dataset: fake_paths)
-    result = build_grpo_data("NYC")
-    train_df = pd.read_parquet(result["train_path"])
-    valid_df = pd.read_parquet(result["valid_path"])
 
-    assert len(train_df) == 1
-    assert len(valid_df) == 1
-    assert list(train_df.columns) == ["data_source", "prompt", "prompt_messages", "ability", "reward_model", "extra_info"]
-    first_prompt = list(train_df.iloc[0]["prompt"])
-    assert len(first_prompt) == 2
-    assert first_prompt[0]["role"] == "system"
-    prompt_items = list(train_df.iloc[0]["prompt_messages"])
-    assert len(prompt_items) == 2
-    assert prompt_items[0]["role"] == "system"
-    assert "exactly 10 complete semantic IDs" in prompt_items[0]["content"]
-    assert "You must return exactly 10 complete semantic IDs" in prompt_items[1]["content"]
-    assert "<a_1><b_2><c_3>" in prompt_items[1]["content"]
-    assert "Start the reply immediately with the first semantic ID." in prompt_items[1]["content"]
-    assert train_df.iloc[0]["reward_model"]["ground_truth"] == "<a_1><b_2><c_3>"
-    assert train_df.iloc[0]["extra_info"]["prompt_template_version"] == "v3"
+    result = build_grpo_data("NYC")
+    train_rows = list(iter_jsonl(result["train_path"]))
+    valid_rows = list(iter_jsonl(result["valid_path"]))
+
+    assert len(train_rows) == 1
+    assert len(valid_rows) == 1
+    assert result["train_path"].endswith("train.jsonl")
+    assert result["valid_path"].endswith("valid.jsonl")
+
+    first_row = train_rows[0]
+    assert list(first_row.keys()) == [
+        "data_source",
+        "ability",
+        "messages",
+        "ground_truth",
+        "sample_id",
+        "uid",
+        "repr",
+        "history_source",
+        "target_time",
+        "prompt_template_version",
+    ]
+    assert len(first_row["messages"]) == 2
+    assert first_row["messages"][0]["role"] == "system"
+    assert "exactly 10 complete semantic IDs" in first_row["messages"][0]["content"]
+    assert "You must return exactly 10 complete semantic IDs" in first_row["messages"][1]["content"]
+    assert first_row["ground_truth"] == "<a_1><b_2><c_3>"
+    assert first_row["prompt_template_version"] == "v3"
     assert result["model_profile"] == "qwen3-8b-instruct"

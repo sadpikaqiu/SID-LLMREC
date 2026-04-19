@@ -1,5 +1,7 @@
 import json
+import sys
 
+from gnprsid import cli
 from gnprsid.grpo.plot_rewards import build_reward_trace_report
 from gnprsid.grpo.reward_current_top10 import compute_score
 
@@ -152,3 +154,42 @@ def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):
     assert summary["parsed_prediction_count_histogram"] == {0: 2, 1: 1}
     assert summary["top_solution_previews"][0]["solution_preview"] == "<eos>"
     assert summary["top_solution_previews"][0]["count"] == 2
+
+
+def test_cli_plot_trace_dispatches_to_html_report_builder(monkeypatch):
+    calls = {}
+
+    def fake_build_reward_trace_report(**kwargs):
+        calls.update(kwargs)
+        return {"output_path": "report.html"}
+
+    monkeypatch.setattr("gnprsid.grpo.plot_rewards.build_reward_trace_report", fake_build_reward_trace_report)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gnprsid.cli",
+            "grpo",
+            "plot-trace",
+            "--trace-path",
+            "reward_traces",
+            "--output-path",
+            "report.html",
+            "--csv-path",
+            "report.csv",
+            "--summary-path",
+            "report.summary.json",
+            "--group-size",
+            "8",
+        ],
+    )
+
+    cli.main()
+
+    assert calls == {
+        "trace_path": "reward_traces",
+        "output_path": "report.html",
+        "csv_path": "report.csv",
+        "summary_path": "report.summary.json",
+        "group_size": 8,
+    }

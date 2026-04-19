@@ -6,7 +6,7 @@ Linux-first refactor of GNPR-SID built around the V2 pipeline:
 - cosine+EMA SID training/export
 - SID-LLM alignment
 - SFT backend orchestration
-- GRPO backend orchestration with official `verl`
+- GRPO backend orchestration with `ms-swift`
 - retrieval-based history construction
 - local batch inference and evaluation
 - clean Linux-first CLI without legacy command compatibility
@@ -42,9 +42,9 @@ python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.y
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b2.yaml
 python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/final
 python -m gnprsid.cli alignment evaluate --dataset NYC --model-config configs/models/qwen25_7b.yaml --task sid_to_abc_profile
-python -m gnprsid.cli grpo build-data --dataset NYC
-python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_verl.yaml
-python -m gnprsid.cli train merge-verl --checkpoint-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100
+python -m gnprsid.cli grpo build-data --dataset NYC --model-profile qwen3-8b-instruct
+python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_ms_swift_qwen3.yaml
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen3_8b.yaml --adapter-path checkpoints/NYC/grpo/qwen3_8b_sid_current/checkpoint-100
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test --config configs/retrieval/default.yaml
 python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current --model-config configs/models/qwen25_7b.yaml --decoding-mode direct
@@ -106,11 +106,12 @@ python -m gnprsid.cli eval run \
   --predictions outputs/NYC/predictions/sid_current_test_direct.json \
   --output-path outputs/NYC/eval/eval_sid_current_direct.json
 
-python -m gnprsid.cli grpo build-data --dataset NYC
-python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_verl.yaml
-python -m gnprsid.cli train merge-verl \
-  --checkpoint-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100 \
-  --output-path checkpoints/NYC/grpo/qwen25_7b_sid_current/global_step_100_actor_merged
+python -m gnprsid.cli grpo build-data --dataset NYC --model-profile qwen3-8b-instruct
+python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_ms_swift_qwen3.yaml
+python -m gnprsid.cli train merge-peft \
+  --model-config configs/models/qwen3_8b.yaml \
+  --adapter-path checkpoints/NYC/grpo/qwen3_8b_sid_current/checkpoint-100 \
+  --output-path checkpoints/NYC/grpo/qwen3_8b_sid_current/checkpoint-100-merged
 
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test \
@@ -136,4 +137,4 @@ python -m gnprsid.cli eval summarize --dataset NYC
 - `infer batch` now supports both `candidate_constrained` and `direct` decoding.
 - The GRPO mainline is `direct`: RL directly optimizes a one-line top10 semantic-ID response.
 - `candidate_constrained` remains the strong deployment baseline and comparison target.
-- GRPO uses the official installed `verl` package and a repo-local custom reward file; it does not vendor `SIDReasoner/verl`.
+- GRPO uses `ms-swift` with a repo-local external reward plugin and keeps the previous `verl` assets archived under `legacy/verl_backup/`.

@@ -66,6 +66,12 @@ def build_parser() -> argparse.ArgumentParser:
     grpo_inspect = grpo_sub.add_parser("inspect-trace")
     grpo_inspect.add_argument("--trace-path", required=True)
     grpo_inspect.add_argument("--top-k", type=int, default=10)
+    grpo_plot = grpo_sub.add_parser("plot-trace")
+    grpo_plot.add_argument("--trace-path", required=True)
+    grpo_plot.add_argument("--output-path", default=None)
+    grpo_plot.add_argument("--csv-path", default=None)
+    grpo_plot.add_argument("--summary-path", default=None)
+    grpo_plot.add_argument("--group-size", type=int, default=None)
     grpo_inspect_sample = grpo_sub.add_parser("inspect-sample")
     grpo_inspect_sample.add_argument("--train-config", required=True)
     grpo_inspect_sample.add_argument("--split", default="valid", choices=["train", "valid"])
@@ -89,12 +95,6 @@ def build_parser() -> argparse.ArgumentParser:
     merge_parser.add_argument("--model-config", required=True)
     merge_parser.add_argument("--adapter-path", required=True)
     merge_parser.add_argument("--output-path", default=None)
-    merge_verl_parser = train_sub.add_parser("merge-verl")
-    merge_verl_parser.add_argument("--checkpoint-path", required=True)
-    merge_verl_parser.add_argument("--output-path", default=None)
-    merge_verl_parser.add_argument("--backend", default="fsdp", choices=["fsdp"])
-    merge_verl_parser.add_argument("--trust-remote-code", action="store_true")
-    merge_verl_parser.add_argument("--use-cpu-init", action="store_true")
 
     retrieval_parser = subparsers.add_parser("retrieval")
     retrieval_sub = retrieval_parser.add_subparsers(dest="retrieval_command", required=True)
@@ -216,21 +216,30 @@ def main() -> None:
             from gnprsid.grpo.build_data import build_grpo_data
 
             result = build_grpo_data(dataset=args.dataset, output_dir=args.output_dir, model_profile=args.model_profile)
+        elif args.grpo_command == "inspect-trace":
+            from gnprsid.grpo.inspect_trace import summarize_reward_traces
+
+            result = summarize_reward_traces(trace_path=args.trace_path, top_k=args.top_k)
+        elif args.grpo_command == "plot-trace":
+            from gnprsid.grpo.plot_rewards import build_reward_trace_report
+
+            result = build_reward_trace_report(
+                trace_path=args.trace_path,
+                output_path=args.output_path,
+                csv_path=args.csv_path,
+                summary_path=args.summary_path,
+                group_size=args.group_size,
+            )
         else:
-            if args.grpo_command == "inspect-trace":
-                from gnprsid.grpo.inspect_trace import summarize_reward_traces
+            from gnprsid.grpo.inspect_sample import inspect_grpo_sample
 
-                result = summarize_reward_traces(trace_path=args.trace_path, top_k=args.top_k)
-            else:
-                from gnprsid.grpo.inspect_sample import inspect_grpo_sample
-
-                result = inspect_grpo_sample(
-                    train_config_path=args.train_config,
-                    split=args.split,
-                    sample_id=args.sample_id,
-                    row_index=args.row_index,
-                    grpo_data_path=args.grpo_data_path,
-                )
+            result = inspect_grpo_sample(
+                train_config_path=args.train_config,
+                split=args.split,
+                sample_id=args.sample_id,
+                row_index=args.row_index,
+                grpo_data_path=args.grpo_data_path,
+            )
     elif args.command_group == "warmup":
         from gnprsid.warmup.build_data import build_warmup_data
 
@@ -251,16 +260,6 @@ def main() -> None:
                 model_config_path=args.model_config,
                 adapter_path=args.adapter_path,
                 output_path=args.output_path,
-            )
-        else:
-            from gnprsid.train.merge_verl import merge_verl_actor
-
-            result = merge_verl_actor(
-                checkpoint_path=args.checkpoint_path,
-                output_path=args.output_path,
-                backend=args.backend,
-                trust_remote_code=args.trust_remote_code,
-                use_cpu_init=args.use_cpu_init,
             )
     elif args.command_group == "retrieval":
         if args.retrieval_command == "build-bank":

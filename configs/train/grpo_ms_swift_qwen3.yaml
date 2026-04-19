@@ -1,0 +1,52 @@
+stage: grpo
+backend: ms-swift
+dataset: NYC
+model_profile: qwen3-8b-instruct
+history_source: current
+repr: sid
+train_path: artifacts/NYC/grpo/sid/current/train.jsonl
+valid_path: artifacts/NYC/grpo/sid/current/valid.jsonl
+init_model_path: checkpoints/NYC/warmup/qwen3_8b_sid_current/merged_final
+reward_function_path: src/gnprsid/grpo/reward_current_top10.py
+output_dir: checkpoints/NYC/grpo/qwen3_8b_sid_current
+max_length: 2048
+max_completion_length: 256
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 1
+num_generations: 8
+learning_rate: 1.0e-06
+num_train_epochs: 3
+warmup_ratio: 0.05
+beta: 0.001
+attn_impl: flash_attn
+temperature: 1.0
+top_p: 0.85
+use_vllm: true
+vllm_mode: colocate
+vllm_gpu_memory_utilization: 0.35
+vllm_tensor_parallel_size: 1
+sleep_level: 1
+offload_model: true
+offload_optimizer: true
+deepspeed: zero2
+logging_steps: 10
+save_steps: 100
+eval_steps: 100
+save_total_limit: 2
+dataset_num_proc: 4
+dataloader_num_workers: 4
+report_to: none
+n_gpus_per_node: 8
+nnodes: 1
+project_name: gnprsid-grpo
+experiment_name: nyc-sid-current-qwen3
+lora:
+  r: 16
+  alpha: 32
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - gate_proj
+    - up_proj

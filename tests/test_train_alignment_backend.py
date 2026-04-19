@@ -187,7 +187,6 @@ def test_run_training_stage_alignment_does_not_relaunch_when_skip_manifest_env_p
     )
 
     monkeypatch.setenv(TORCHRUN_SKIP_MANIFEST_ENV, "1")
-    monkeypatch.setattr("gnprsid.train.base.find_spec", lambda name: None)
 
     try:
         run_training_stage(config_path, stage_override="alignment")

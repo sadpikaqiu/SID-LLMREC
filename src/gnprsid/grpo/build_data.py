@@ -3,9 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
-import pandas as pd
-
-from gnprsid.common.io import ensure_dir, iter_jsonl, write_json
+from gnprsid.common.io import ensure_dir, iter_jsonl, write_json, write_jsonl
 from gnprsid.common.logging import get_logger
 from gnprsid.common.paths import dataset_paths
 from gnprsid.common.profiles import resolve_project_path
@@ -24,7 +22,7 @@ def _load_rows(path: Path) -> list[dict]:
     return list(iter_jsonl(path))
 
 
-def _to_verl_rows(rows: Iterable[dict]) -> list[dict]:
+def _to_ms_swift_rows(rows: Iterable[dict]) -> list[dict]:
     payload: list[dict] = []
     sys_prompt = system_prompt("sid", "current", candidate_count=10)
     for row in rows:
@@ -36,22 +34,15 @@ def _to_verl_rows(rows: Iterable[dict]) -> list[dict]:
         payload.append(
             {
                 "data_source": GRPO_DATA_SOURCE,
-                "prompt": messages,
-                "prompt_messages": messages,
                 "ability": GRPO_ABILITY,
-                "reward_model": {
-                    "style": "rule",
-                    "ground_truth": str(row["target"]),
-                },
-                "extra_info": {
-                    "sample_id": str(row["sample_id"]),
-                    "uid": int(row["uid"]),
-                    "repr": "sid",
-                    "history_source": "current",
-                    "target": str(row["target"]),
-                    "target_time": str(row["target_time"]),
-                    "prompt_template_version": PROMPT_TEMPLATE_VERSION,
-                },
+                "messages": messages,
+                "ground_truth": str(row["target"]),
+                "sample_id": str(row["sample_id"]),
+                "uid": int(row["uid"]),
+                "repr": "sid",
+                "history_source": "current",
+                "target_time": str(row["target_time"]),
+                "prompt_template_version": PROMPT_TEMPLATE_VERSION,
             }
         )
     return payload
@@ -69,13 +60,13 @@ def build_grpo_data(
     train_rows = _load_rows(source_dir / "samples_sid_train.jsonl")
     valid_rows = _load_rows(source_dir / "samples_sid_val.jsonl")
 
-    train_payload = _to_verl_rows(train_rows)
-    valid_payload = _to_verl_rows(valid_rows)
+    train_payload = _to_ms_swift_rows(train_rows)
+    valid_payload = _to_ms_swift_rows(valid_rows)
 
-    train_path = output_dir / "train.parquet"
-    valid_path = output_dir / "valid.parquet"
-    pd.DataFrame(train_payload).to_parquet(train_path, index=False)
-    pd.DataFrame(valid_payload).to_parquet(valid_path, index=False)
+    train_path = output_dir / "train.jsonl"
+    valid_path = output_dir / "valid.jsonl"
+    write_jsonl(train_path, train_payload)
+    write_jsonl(valid_path, valid_payload)
 
     manifest = {
         "dataset": dataset,

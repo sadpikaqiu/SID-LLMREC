@@ -63,7 +63,7 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     manifest = run_training_stage(config_path, stage_override="grpo")
 
     command = captured["command"]
-    assert command == ["swift", "rlhf", "--config", str(output_dir / "ms_swift_grpo.yaml")]
+    assert command == ["swift", "rlhf", str(output_dir / "ms_swift_grpo.yaml")]
     assert captured["check"] is True
     assert captured["env"]["GNPRSID_REWARD_TRACE_DIR"] == str(output_dir / "reward_traces")
     assert captured["env"]["GNPRSID_REWARD_TRACE_GROUP_SIZE"] == "8"

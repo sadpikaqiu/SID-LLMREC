@@ -555,6 +555,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
             "rlhf_type": "grpo",
             "model": str(init_model_path),
             "model_type": model_cfg.get("ms_swift_model_type"),
+            "template": model_cfg.get("ms_swift_template"),
             "train_type": "lora",
             "dataset": [str(train_path)],
             "val_dataset": [str(valid_path)],

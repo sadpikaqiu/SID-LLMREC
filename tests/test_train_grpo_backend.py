@@ -76,6 +76,7 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     assert generated_cfg["rlhf_type"] == "grpo"
     assert generated_cfg["model"] == str(init_model_path)
     assert generated_cfg["model_type"] == "qwen3"
+    assert generated_cfg["template"] == "qwen3_nothinking"
     assert generated_cfg["dataset"] == [str(train_path)]
     assert generated_cfg["val_dataset"] == [str(valid_path)]
     assert generated_cfg["reward_funcs"] == ["gnprsid_top10"]

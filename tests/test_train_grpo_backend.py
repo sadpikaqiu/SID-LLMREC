@@ -77,12 +77,14 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     assert generated_cfg["model"] == str(init_model_path)
     assert generated_cfg["model_type"] == "qwen3"
     assert generated_cfg["template"] == "qwen3_nothinking"
+    assert generated_cfg["tuner_type"] == "lora"
     assert generated_cfg["dataset"] == [str(train_path)]
     assert generated_cfg["val_dataset"] == [str(valid_path)]
     assert generated_cfg["reward_funcs"] == ["gnprsid_top10"]
-    assert generated_cfg["dtype"] == "bfloat16"
-    assert "torch_dtype" not in generated_cfg
+    assert generated_cfg["torch_dtype"] == "bfloat16"
+    assert "dtype" not in generated_cfg
     assert "deepspeed" not in generated_cfg
+    assert "gc_collect_after_offload" not in generated_cfg
     assert generated_cfg["attn_impl"] == "flash_attn"
     assert generated_cfg["enable_thinking"] is False
     assert generated_cfg["add_non_thinking_prefix"] is True

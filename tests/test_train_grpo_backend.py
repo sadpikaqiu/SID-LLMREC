@@ -63,7 +63,8 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     manifest = run_training_stage(config_path, stage_override="grpo")
 
     command = captured["command"]
-    assert command == ["swift", "rlhf", str(output_dir / "ms_swift_grpo.yaml")]
+    runtime_dir = output_dir / ".gnprsid"
+    assert command == ["swift", "rlhf", str(runtime_dir / "ms_swift_grpo.yaml")]
     assert captured["check"] is True
     assert captured["env"]["GNPRSID_REWARD_TRACE_DIR"] == str(output_dir / "reward_traces")
     assert captured["env"]["GNPRSID_REWARD_TRACE_GROUP_SIZE"] == "8"
@@ -72,7 +73,7 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     assert captured["env"]["NPROC_PER_NODE"] == "8"
     assert "src" in captured["env"]["PYTHONPATH"]
 
-    generated_cfg = load_yaml(output_dir / "ms_swift_grpo.yaml")
+    generated_cfg = load_yaml(runtime_dir / "ms_swift_grpo.yaml")
     assert generated_cfg["rlhf_type"] == "grpo"
     assert generated_cfg["model"] == str(init_model_path)
     assert generated_cfg["model_type"] == "qwen3"
@@ -92,7 +93,8 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     assert generated_cfg["offload_model"] is True
     assert generated_cfg["offload_optimizer"] is True
     assert generated_cfg["target_modules"] == ["q_proj", "k_proj", "v_proj", "gate_proj", "up_proj"]
-    assert manifest["result"]["ms_swift_config_path"] == str(output_dir / "ms_swift_grpo.yaml")
+    assert manifest["result"]["runtime_dir"] == str(runtime_dir)
+    assert manifest["result"]["ms_swift_config_path"] == str(runtime_dir / "ms_swift_grpo.yaml")
 
 
 def test_cleanup_grpo_runtime_processes_attempts_ray_and_vllm_cleanup(monkeypatch):

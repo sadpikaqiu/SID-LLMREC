@@ -518,6 +518,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
     def run(self, context: TrainContext, prepared: dict[str, Any]) -> dict[str, Any]:
         cfg = context.stage_config
         output_dir = ensure_dir(context.output_dir)
+        runtime_dir = ensure_dir(output_dir / ".gnprsid")
         swift_cli = shutil.which("swift")
         if not swift_cli:
             raise FileNotFoundError("Could not find 'swift'. Install ms-swift in the Linux training environment first.")
@@ -622,7 +623,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
 
         ms_swift_config = {key: value for key, value in ms_swift_config.items() if value is not None}
 
-        ms_swift_config_path = output_dir / "ms_swift_grpo.yaml"
+        ms_swift_config_path = runtime_dir / "ms_swift_grpo.yaml"
         dump_yaml(ms_swift_config_path, ms_swift_config)
 
         command = [swift_cli, "rlhf", str(ms_swift_config_path)]
@@ -656,6 +657,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
             "init_model_path": str(init_model_path),
             "reward_function_path": str(reward_path),
             "reward_trace_dir": str(reward_trace_dir),
+            "runtime_dir": str(runtime_dir),
             "ms_swift_config_path": str(ms_swift_config_path),
             "plugin_path": str(plugin_path),
             "command": [str(token) for token in command],

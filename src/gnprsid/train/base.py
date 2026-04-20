@@ -604,7 +604,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
             "offload_model": offload_model,
             "offload_optimizer": offload_optimizer,
             "gc_collect_after_offload": bool(cfg.get("gc_collect_after_offload", offload_model or offload_optimizer)),
-            "deepspeed": str(cfg.get("deepspeed", "zero2")),
+            "deepspeed": cfg.get("deepspeed"),
             "packing": bool(cfg.get("packing", False)),
             "log_completions": bool(cfg.get("log_completions", True)),
             "dataloader_num_workers": int(cfg.get("dataloader_num_workers", 4)),

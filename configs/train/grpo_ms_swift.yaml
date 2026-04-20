@@ -29,7 +29,6 @@ vllm_tensor_parallel_size: 1
 sleep_level: 1
 offload_model: true
 offload_optimizer: true
-deepspeed: zero2
 logging_steps: 10
 save_steps: 100
 eval_steps: 100

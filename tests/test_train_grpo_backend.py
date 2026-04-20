@@ -82,6 +82,7 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     assert generated_cfg["reward_funcs"] == ["gnprsid_top10"]
     assert generated_cfg["dtype"] == "bfloat16"
     assert "torch_dtype" not in generated_cfg
+    assert "deepspeed" not in generated_cfg
     assert generated_cfg["attn_impl"] == "flash_attn"
     assert generated_cfg["enable_thinking"] is False
     assert generated_cfg["add_non_thinking_prefix"] is True

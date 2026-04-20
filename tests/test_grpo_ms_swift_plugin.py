@@ -3,6 +3,7 @@ from gnprsid.grpo.ms_swift_plugin import (
     MS_SWIFT_REWARD_NAME_ENV,
     MS_SWIFT_REWARD_PATH_ENV,
     _load_reward_callable,
+    orms,
 )
 from gnprsid.grpo.reward_current_top10 import compute_score
 
@@ -41,6 +42,10 @@ def test_ms_swift_reward_plugin_matches_project_reward(monkeypatch):
         },
     )
     assert scores == [expected]
+
+
+def test_ms_swift_reward_plugin_registers_reward_name():
+    assert orms["gnprsid_top10"] is GNPRSIDTop10Reward
 
 
 def test_ms_swift_reward_plugin_can_load_external_reward_file(monkeypatch, tmp_path):

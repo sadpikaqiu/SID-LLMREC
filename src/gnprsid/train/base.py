@@ -554,6 +554,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
         ms_swift_config = {
             "rlhf_type": "grpo",
             "model": str(init_model_path),
+            "model_type": model_cfg.get("ms_swift_model_type"),
             "train_type": "lora",
             "dataset": [str(train_path)],
             "val_dataset": [str(valid_path)],
@@ -562,7 +563,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
             "add_version": False,
             "external_plugins": [str(plugin_path)],
             "reward_funcs": ["gnprsid_top10"],
-            "torch_dtype": str(model_cfg.get("dtype", "bfloat16")),
+            "dtype": str(model_cfg.get("dtype", "bfloat16")),
             "attn_impl": _normalize_ms_swift_attn_impl(str(cfg.get("attn_impl", cfg.get("attn_implementation", "flash_attn")))),
             "max_length": int(cfg.get("max_length", cfg.get("max_prompt_length", 2048))),
             "max_completion_length": int(cfg.get("max_completion_length", cfg.get("max_response_length", 256))),
@@ -618,6 +619,8 @@ class GRPOMsSwiftBackend(TrainingBackend):
                 ms_swift_config["loss_scale"] = str(cfg.get("loss_scale", "last_round+ignore_empty_think"))
         if cfg.get("warmup_ratio") is not None:
             ms_swift_config["warmup_ratio"] = float(cfg["warmup_ratio"])
+
+        ms_swift_config = {key: value for key, value in ms_swift_config.items() if value is not None}
 
         ms_swift_config_path = output_dir / "ms_swift_grpo.yaml"
         dump_yaml(ms_swift_config_path, ms_swift_config)

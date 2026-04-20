@@ -2,6 +2,7 @@ name: qwen2.5-7b-instruct
 family: qwen
 base_model: /home/sylteacher/models/Qwen2.5-7B-Instruct
 tokenizer_name: /home/sylteacher/models/Qwen2.5-7B-Instruct
+ms_swift_model_type: qwen2_5
 device_map: auto
 dtype: bfloat16
 max_length: 2048

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from swift.rewards import ORM, orms
+    from swift.plugin import ORM, orms
 except ImportError:  # pragma: no cover - makes local unit tests independent from ms-swift install
     class ORM:  # type: ignore[override]
         pass

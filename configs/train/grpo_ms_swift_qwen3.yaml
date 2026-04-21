@@ -30,8 +30,8 @@ sleep_level: 0
 offload_model: false
 offload_optimizer: false
 logging_steps: 10
-save_steps: 100
-eval_steps: 100
+save_steps: 500
+eval_steps: 500
 save_total_limit: 2
 dataset_num_proc: 4
 dataloader_num_workers: 4

@@ -1,6 +1,6 @@
 import pytest
 
-from gnprsid.common.config import dump_yaml
+from gnprsid.common.config import dump_yaml, load_yaml
 from gnprsid.train.base import run_training_stage
 
 
@@ -54,6 +54,8 @@ def test_run_training_stage_warmup_builds_llamafactory_command(monkeypatch, tmp_
     assert manifest["backend"] == "llamafactory"
     assert manifest["result"]["base_model_source"] == str(base_model_path)
     assert manifest["result"]["dataset_dir"] == str(output_dir / "llamafactory_dataset")
+    train_yaml = load_yaml(output_dir / "llamafactory_train.yaml")
+    assert train_yaml["use_fast_tokenizer"] is False
 
 
 def test_run_training_stage_warmup_rejects_missing_local_base_model(monkeypatch, tmp_path):

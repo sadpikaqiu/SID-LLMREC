@@ -473,6 +473,7 @@ def _run_llamafactory_backend(context: TrainContext) -> dict[str, Any]:
             "stage": "sft",
             "do_train": True,
             "finetuning_type": "lora",
+            "use_fast_tokenizer": bool(cfg.get("use_fast_tokenizer", False)),
             "lora_target": ",".join(cfg["lora_target"]),
             "template": cfg.get("template", "qwen"),
             "dataset_dir": str(dataset_dir),

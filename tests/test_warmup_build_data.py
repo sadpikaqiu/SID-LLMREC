@@ -50,6 +50,39 @@ def test_build_ranked_sid_targets_prefers_shared_prefixes():
     assert len(ranked) == 10
 
 
+def test_build_ranked_sid_targets_caps_same_abc_prefix_when_alternatives_exist():
+    sid_space = [
+        "<a_1><b_1><c_1>",
+        "<a_1><b_1><c_1><d_0>",
+        "<a_1><b_1><c_1><d_1>",
+        "<a_1><b_1><c_1><d_2>",
+        "<a_1><b_1><c_2>",
+        "<a_1><b_2><c_1>",
+        "<a_2><b_1><c_1>",
+        "<a_3><b_1><c_1>",
+        "<a_4><b_1><c_1>",
+        "<a_5><b_1><c_1>",
+    ]
+    from collections import Counter
+
+    from gnprsid.alignment.semantic import sid_prefix
+    from gnprsid.warmup.build_data import _build_prefix_groups
+
+    ranked = build_ranked_sid_targets(
+        "<a_1><b_1><c_1>",
+        sid_space=sid_space,
+        target_counts=Counter({sid: len(sid_space) - idx for idx, sid in enumerate(sid_space)}),
+        prefix_groups=_build_prefix_groups(sid_space),
+        top_k=8,
+    )
+
+    target_abc = sid_prefix("<a_1><b_1><c_1>", "abc")
+    same_abc_count = sum(1 for sid in ranked if sid_prefix(sid, "abc") == target_abc)
+    assert same_abc_count == 2
+    assert "<a_1><b_1><c_2>" in ranked
+    assert "<a_1><b_2><c_1>" in ranked
+
+
 def test_build_warmup_data_writes_direct10_targets(monkeypatch, tmp_path):
     processed = tmp_path / "processed"
     artifacts = tmp_path / "artifacts"

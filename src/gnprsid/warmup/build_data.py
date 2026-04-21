@@ -67,19 +67,48 @@ def build_ranked_sid_targets(
 
     ranked = [target_sid]
     seen = {target_sid}
+    target_a = sid_prefix(target_sid, "a")
+    target_ab = sid_prefix(target_sid, "ab")
+    target_abc = sid_prefix(target_sid, "abc")
 
-    for level in ("abc", "ab", "a"):
-        prefix_value = sid_prefix(target_sid, level)
-        candidates = sorted(prefix_groups[level][prefix_value], key=lambda sid: _ranking_key(sid, target_counts))
-        for candidate in candidates:
-            if candidate in seen:
-                continue
-            ranked.append(candidate)
-            seen.add(candidate)
-            if len(ranked) == top_k:
-                return ranked
+    same_abc_candidates = sorted(prefix_groups["abc"][target_abc], key=lambda sid: _ranking_key(sid, target_counts))
+    for candidate in same_abc_candidates:
+        if candidate in seen:
+            continue
+        ranked.append(candidate)
+        seen.add(candidate)
+        if len(ranked) == 2 or len(ranked) == top_k:
+            break
+    if len(ranked) == top_k:
+        return ranked
+
+    same_ab_candidates = sorted(prefix_groups["ab"][target_ab], key=lambda sid: _ranking_key(sid, target_counts))
+    for candidate in same_ab_candidates:
+        if candidate in seen or sid_prefix(candidate, "abc") == target_abc:
+            continue
+        ranked.append(candidate)
+        seen.add(candidate)
+        if len(ranked) == top_k:
+            return ranked
+
+    same_a_candidates = sorted(prefix_groups["a"][target_a], key=lambda sid: _ranking_key(sid, target_counts))
+    for candidate in same_a_candidates:
+        if candidate in seen or sid_prefix(candidate, "ab") == target_ab:
+            continue
+        ranked.append(candidate)
+        seen.add(candidate)
+        if len(ranked) == top_k:
+            return ranked
 
     global_candidates = sorted(sid_space, key=lambda sid: _ranking_key(sid, target_counts))
+    for candidate in global_candidates:
+        if candidate in seen or sid_prefix(candidate, "abc") == target_abc:
+            continue
+        ranked.append(candidate)
+        seen.add(candidate)
+        if len(ranked) == top_k:
+            return ranked
+
     for candidate in global_candidates:
         if candidate in seen:
             continue

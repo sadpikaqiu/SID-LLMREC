@@ -9,14 +9,14 @@ from gnprsid.grpo.reward_trace import append_reward_trace
 SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
 SID_TOKEN_PATTERN = r"<[a-z]_\d+>"
 
-FORMAT_WEIGHT = 1.0
+FORMAT_WEIGHT = 0.5
 SINGLE_LINE_COMPONENT_WEIGHT = 0.2
 VALID_COUNT_COMPONENT_WEIGHT = 0.5
 EXACT_TEN_COMPONENT_WEIGHT = 0.3
 RECIPROCAL_RANK_WEIGHT = 1.0
 SOFT_HIT_WEIGHT = 1.0
 PREFIX_MATCH_WEIGHT = 0.2
-DIVERSITY_WEIGHT = 0.2
+DIVERSITY_WEIGHT = 0.1
 
 
 def _extract_predictions(text: str) -> list[str]:

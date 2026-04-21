@@ -10,7 +10,7 @@ init_model_path: checkpoints/NYC/warmup/qwen3_8b_sid_current/merged_final
 reward_function_path: src/gnprsid/grpo/reward_current_top10.py
 output_dir: checkpoints/NYC/grpo/qwen3_8b_sid_current
 max_length: 2048
-max_completion_length: 256
+max_completion_length: 192
 per_device_train_batch_size: 2
 per_device_eval_batch_size: 2
 gradient_accumulation_steps: 1

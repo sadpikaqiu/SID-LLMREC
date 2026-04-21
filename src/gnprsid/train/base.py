@@ -558,7 +558,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
             "model": str(init_model_path),
             "model_type": model_cfg.get("ms_swift_model_type"),
             "template": model_cfg.get("ms_swift_template"),
-            "tuner_type": "lora",
+            "train_type": "lora",
             "dataset": [str(train_path)],
             "val_dataset": [str(valid_path)],
             "split_dataset_ratio": 0,

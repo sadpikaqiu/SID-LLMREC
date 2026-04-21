@@ -117,6 +117,9 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
     assert "Synthetic Step" in html_report
     assert "Mean Reward" in html_report
     assert "Cumulative Total Reward" in html_report
+    assert "Per-Step Mean Reward Components (Split Panels)" in html_report
+    assert "format_reward" in html_report
+    assert "diversity_reward" in html_report
 
 
 def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):

@@ -283,6 +283,109 @@ def _render_svg_chart(
     )
 
 
+def _render_compact_svg_chart(
+    title: str,
+    x_values: list[int],
+    y_values: list[float],
+    y_axis_label: str,
+    color: str,
+) -> str:
+    width = 440
+    height = 260
+    left = 62
+    right = 18
+    top = 24
+    bottom = 48
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+
+    y_ticks, y_min, y_max = _build_y_ticks(y_values)
+    x_ticks = _build_x_ticks(x_values, max_ticks=4)
+    x_min = x_values[0]
+    x_max = x_values[-1]
+    polyline = _build_polyline(
+        x_values=x_values,
+        y_values=y_values,
+        x_min=x_min,
+        x_max=x_max,
+        y_min=y_min,
+        y_max=y_max,
+        left=left,
+        top=top,
+        plot_width=plot_width,
+        plot_height=plot_height,
+    )
+
+    x_tick_lines = []
+    x_tick_labels = []
+    for tick in x_ticks:
+        x = left + plot_width * ((tick - x_min) / max(x_max - x_min, 1e-9))
+        x_tick_lines.append(
+            f'<line x1="{x:.2f}" y1="{top}" x2="{x:.2f}" y2="{top + plot_height}" stroke="#ededed" stroke-width="1" />'
+        )
+        x_tick_labels.append(
+            f'<text x="{x:.2f}" y="{top + plot_height + 20}" text-anchor="middle" font-size="11" fill="#4a4a4a">{tick}</text>'
+        )
+
+    y_tick_lines = []
+    y_tick_labels = []
+    for tick in y_ticks:
+        y = top + plot_height - plot_height * ((tick - y_min) / max(y_max - y_min, 1e-9))
+        y_tick_lines.append(
+            f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="#ededed" stroke-width="1" />'
+        )
+        y_tick_labels.append(
+            f'<text x="{left - 10}" y="{y + 4:.2f}" text-anchor="end" font-size="11" fill="#4a4a4a">{html.escape(_format_tick(tick))}</text>'
+        )
+
+    svg = (
+        f"<svg viewBox=\"0 0 {width} {height}\" style=\"width:100%;border:1px solid #d8d8d8;background:#fff;\">"
+        f"{''.join(x_tick_lines)}"
+        f"{''.join(y_tick_lines)}"
+        f'<line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="#5a5a5a" stroke-width="1.1" />'
+        f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_height}" stroke="#5a5a5a" stroke-width="1.1" />'
+        f'<polyline fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="{polyline}" />'
+        f"{''.join(x_tick_labels)}"
+        f"{''.join(y_tick_labels)}"
+        f'<text x="{left + plot_width / 2:.2f}" y="{height - 10}" text-anchor="middle" font-size="12" fill="#333">Synthetic Step</text>'
+        f'<text x="16" y="{top + plot_height / 2:.2f}" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90 16 {top + plot_height / 2:.2f})">{html.escape(y_axis_label)}</text>'
+        f"</svg>"
+    )
+    return (
+        "<div style=\"background:#fff;border:1px solid #ddd;padding:12px 12px 10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);\">"
+        f"<h3 style=\"font-size:15px;font-weight:600;margin:0 0 8px;\">{html.escape(title)}</h3>"
+        f"{svg}"
+        "</div>"
+    )
+
+
+def _render_split_component_panel(
+    title: str,
+    x_values: list[int],
+    series_map: dict[str, list[float]],
+    y_axis_label: str,
+) -> str:
+    cards = []
+    for index, (label, values) in enumerate(series_map.items()):
+        color = PAPER_PALETTE[index % len(PAPER_PALETTE)]
+        cards.append(
+            _render_compact_svg_chart(
+                title=label,
+                x_values=x_values,
+                y_values=values,
+                y_axis_label=y_axis_label,
+                color=color,
+            )
+        )
+    return (
+        f"<section style=\"margin-bottom:12px;\">"
+        f"<h2 style=\"font-size:18px;font-weight:600;margin:0 0 6px;\">{html.escape(title)}</h2>"
+        f"<div style=\"font-size:13px;color:#555;margin-bottom:12px;\">Each reward component gets its own y-axis so lower-range signals stay readable.</div>"
+        f"<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;\">{''.join(cards)}</div>"
+        f"</section>"
+    )
+
+
 def build_reward_trace_report(
     trace_path: str | Path,
     output_path: str | Path | None = None,
@@ -329,6 +432,12 @@ def build_reward_trace_report(
         "<div class=\"panel\">"
         + _render_svg_chart(
             "Per-Step Mean Reward Components",
+            step_values,
+            {field: frame[f"step_mean_{field}"].tolist() for field in TOP_LEVEL_FIELDS},
+            y_axis_label="Mean Reward",
+        )
+        + _render_split_component_panel(
+            "Per-Step Mean Reward Components (Split Panels)",
             step_values,
             {field: frame[f"step_mean_{field}"].tolist() for field in TOP_LEVEL_FIELDS},
             y_axis_label="Mean Reward",

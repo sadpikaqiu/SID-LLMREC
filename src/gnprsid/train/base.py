@@ -627,7 +627,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
         ms_swift_config_path = runtime_dir / "ms_swift_grpo.yaml"
         dump_yaml(ms_swift_config_path, ms_swift_config)
 
-        command = [swift_cli, "rlhf", str(ms_swift_config_path)]
+        command = [swift_cli, "rlhf", "--config", str(ms_swift_config_path)]
         logger.info("Running ms-swift command: %s", " ".join(str(token) for token in command))
         env = os.environ.copy()
         _prepend_pythonpath(env, project_root() / "src")

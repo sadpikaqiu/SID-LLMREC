@@ -41,8 +41,11 @@ def merge_peft_adapter(
             adapter_config.get("base_model_name_or_path"),
             base_model_source,
         )
-        if adapter_path.joinpath("tokenizer_config.json").exists():
-            tokenizer_source = str(adapter_path)
+        tokenizer_source = (
+            str(adapter_path)
+            if adapter_path.joinpath("tokenizer_config.json").exists()
+            else base_model_source
+        )
 
     device_type = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = resolve_torch_dtype(torch, str(model_cfg.get("dtype", "auto")), device_type)
@@ -58,7 +61,7 @@ def merge_peft_adapter(
     tokenizer = _load_tokenizer_with_fallback(
         AutoTokenizer,
         tokenizer_source,
-        resolve_model_source(model_cfg.get("tokenizer_name", base_model_source)),
+        base_model_source,
     )
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_source,

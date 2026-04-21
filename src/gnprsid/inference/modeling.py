@@ -233,14 +233,14 @@ def load_generation_model(model_config_path: str | Path, checkpoint_path: str | 
             model_cfg["base_model"],
         )
         tokenizer_source = (
-            checkpoint_path
+            str(checkpoint_path)
             if checkpoint_path.joinpath("tokenizer_config.json").exists()
-            else resolve_model_source(model_cfg.get("tokenizer_name", base_model_source))
+            else base_model_source
         )
         tokenizer = _load_tokenizer_with_fallback(
             AutoTokenizer,
             tokenizer_source,
-            resolve_model_source(model_cfg.get("tokenizer_name", base_model_source)),
+            base_model_source,
         )
         model = AutoModelForCausalLM.from_pretrained(base_model_source, **model_kwargs)
         model = PeftModel.from_pretrained(model, str(checkpoint_path))

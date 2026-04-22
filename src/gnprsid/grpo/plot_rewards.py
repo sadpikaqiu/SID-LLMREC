@@ -29,6 +29,12 @@ FORMAT_FIELDS = [
     "exact_ten_score",
 ]
 
+FORMAT_REWARD_FIELDS = [
+    "single_line_reward",
+    "valid_count_reward",
+    "exact_ten_reward",
+]
+
 PAPER_PALETTE = [
     "#0072B2",
     "#D55E00",
@@ -74,7 +80,7 @@ def _resolve_group_size(rows: list[dict], group_size: int | None) -> int:
 
 def _build_step_frame(rows: list[dict], group_size: int) -> pd.DataFrame:
     payload: list[dict] = []
-    cumulative_sums = {field: 0.0 for field in TOP_LEVEL_FIELDS + FORMAT_FIELDS}
+    cumulative_sums = {field: 0.0 for field in TOP_LEVEL_FIELDS + FORMAT_FIELDS + FORMAT_REWARD_FIELDS}
     cumulative_count = 0
 
     for start in range(0, len(rows), group_size):
@@ -88,7 +94,7 @@ def _build_step_frame(rows: list[dict], group_size: int) -> pd.DataFrame:
             "sample_count": len(step_rows),
         }
 
-        for field in TOP_LEVEL_FIELDS + FORMAT_FIELDS:
+        for field in TOP_LEVEL_FIELDS + FORMAT_FIELDS + FORMAT_REWARD_FIELDS:
             step_sum = sum(float(item.get(field, 0.0) or 0.0) for item in step_rows)
             step_mean = step_sum / len(step_rows)
             cumulative_sums[field] += step_sum
@@ -494,10 +500,16 @@ def build_reward_trace_report(
         )
         + "</div><div class=\"panel\">"
         + _render_svg_chart(
-            "Format Subscores",
+            "Format Component Scores (Unweighted)",
             step_values,
             {field: frame[f"step_mean_{field}"].tolist() for field in FORMAT_FIELDS},
             y_axis_label="Mean Score",
+        )
+        + _render_split_component_panel(
+            "Format Reward Components (Weighted)",
+            step_values,
+            {field: frame[f"step_mean_{field}"].tolist() for field in FORMAT_REWARD_FIELDS},
+            y_axis_label="Mean Reward",
         )
         + "</div><div class=\"panel\">"
         + frame.tail(20).to_html(index=False)

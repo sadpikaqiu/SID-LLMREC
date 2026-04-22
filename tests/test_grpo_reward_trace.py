@@ -31,6 +31,9 @@ def test_reward_trace_logging_writes_jsonl(monkeypatch, tmp_path):
     assert rows[0]["total_reward"] == score
     assert rows[0]["soft_hit_reward"] == 1.0
     assert rows[0]["format_reward"] > 0.0
+    assert rows[0]["single_line_reward"] == 0.0
+    assert rows[0]["valid_count_reward"] > 0.0
+    assert rows[0]["exact_ten_reward"] == 0.0
     assert rows[0]["solution_preview"] == "<a_1><b_2><c_3> <a_4><b_5><c_6>"
     assert rows[0]["parsed_predictions"] == ["<a_1><b_2><c_3>", "<a_4><b_5><c_6>"]
 
@@ -54,6 +57,9 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
             "single_line_score": 1.0,
             "valid_count_score": 0.5,
             "exact_ten_score": 0.0,
+            "single_line_reward": 0.1,
+            "valid_count_reward": 0.125,
+            "exact_ten_reward": 0.0,
         },
         {
             "time_ns": 2,
@@ -69,6 +75,9 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
             "single_line_score": 1.0,
             "valid_count_score": 0.7,
             "exact_ten_score": 0.0,
+            "single_line_reward": 0.1,
+            "valid_count_reward": 0.175,
+            "exact_ten_reward": 0.0,
         },
         {
             "time_ns": 3,
@@ -84,6 +93,9 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
             "single_line_score": 1.0,
             "valid_count_score": 1.0,
             "exact_ten_score": 1.0,
+            "single_line_reward": 0.1,
+            "valid_count_reward": 0.25,
+            "exact_ten_reward": 0.15,
         },
         {
             "time_ns": 4,
@@ -99,6 +111,9 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
             "single_line_score": 1.0,
             "valid_count_score": 0.9,
             "exact_ten_score": 1.0,
+            "single_line_reward": 0.1,
+            "valid_count_reward": 0.225,
+            "exact_ten_reward": 0.15,
         },
     ]
     trace_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
@@ -113,13 +128,18 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
     csv_rows = (tmp_path / "report.csv").read_text(encoding="utf-8")
     assert "step_mean_total_reward" in csv_rows
     assert "cumulative_mean_total_reward" in csv_rows
+    assert "step_mean_single_line_reward" in csv_rows
+    assert "step_mean_exact_ten_reward" in csv_rows
     html_report = output_path.read_text(encoding="utf-8")
     assert "Synthetic Step" in html_report
     assert "Mean Reward" in html_report
     assert "Cumulative Total Reward" in html_report
     assert "Per-Step Mean Reward Components (Split Panels)" in html_report
+    assert "Format Reward Components (Weighted)" in html_report
     assert "format_reward" in html_report
     assert "diversity_reward" in html_report
+    assert "single_line_reward" in html_report
+    assert "exact_ten_reward" in html_report
 
 
 def test_build_reward_trace_report_defaults_to_outputs_tree(monkeypatch, tmp_path):
@@ -142,6 +162,9 @@ def test_build_reward_trace_report_defaults_to_outputs_tree(monkeypatch, tmp_pat
                 "single_line_score": 1.0,
                 "valid_count_score": 1.0,
                 "exact_ten_score": 1.0,
+                "single_line_reward": 0.1,
+                "valid_count_reward": 0.25,
+                "exact_ten_reward": 0.15,
             }
         )
         + "\n",

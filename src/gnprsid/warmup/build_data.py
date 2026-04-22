@@ -19,6 +19,10 @@ from gnprsid.prompts.render import (
 
 logger = get_logger(__name__)
 
+MAX_TARGET_ABC_CANDIDATES = 2
+SAME_AB_QUOTA = 2
+SAME_A_QUOTA = 2
+
 
 def _load_rows(path: Path) -> list[dict]:
     if not path.exists():
@@ -55,6 +59,22 @@ def _ranking_key(sid: str, target_counts: Counter[str]) -> tuple[int, str]:
     return (-int(target_counts.get(sid, 0)), sid)
 
 
+def _append_candidate(
+    ranked: list[str],
+    seen: set[str],
+    abc_counts: Counter[str],
+    candidate: str,
+    *,
+    top_k: int,
+) -> bool:
+    if candidate in seen:
+        return False
+    ranked.append(candidate)
+    seen.add(candidate)
+    abc_counts[sid_prefix(candidate, "abc")] += 1
+    return len(ranked) == top_k
+
+
 def build_ranked_sid_targets(
     target_sid: str,
     sid_space: list[str],
@@ -70,51 +90,50 @@ def build_ranked_sid_targets(
     target_a = sid_prefix(target_sid, "a")
     target_ab = sid_prefix(target_sid, "ab")
     target_abc = sid_prefix(target_sid, "abc")
+    abc_counts = Counter({target_abc: 1})
 
     same_abc_candidates = sorted(prefix_groups["abc"][target_abc], key=lambda sid: _ranking_key(sid, target_counts))
     for candidate in same_abc_candidates:
+        if abc_counts[target_abc] >= MAX_TARGET_ABC_CANDIDATES:
+            break
         if candidate in seen:
             continue
-        ranked.append(candidate)
-        seen.add(candidate)
-        if len(ranked) == 2 or len(ranked) == top_k:
+        if _append_candidate(ranked, seen, abc_counts, candidate, top_k=top_k):
             break
     if len(ranked) == top_k:
         return ranked
 
     same_ab_candidates = sorted(prefix_groups["ab"][target_ab], key=lambda sid: _ranking_key(sid, target_counts))
+    same_ab_added = 0
     for candidate in same_ab_candidates:
-        if candidate in seen or sid_prefix(candidate, "abc") == target_abc:
+        candidate_abc = sid_prefix(candidate, "abc")
+        if candidate in seen or candidate_abc == target_abc or abc_counts[candidate_abc] > 0:
             continue
-        ranked.append(candidate)
-        seen.add(candidate)
-        if len(ranked) == top_k:
+        if _append_candidate(ranked, seen, abc_counts, candidate, top_k=top_k):
             return ranked
+        same_ab_added += 1
+        if same_ab_added == SAME_AB_QUOTA:
+            break
 
     same_a_candidates = sorted(prefix_groups["a"][target_a], key=lambda sid: _ranking_key(sid, target_counts))
+    same_a_added = 0
     for candidate in same_a_candidates:
-        if candidate in seen or sid_prefix(candidate, "ab") == target_ab:
+        candidate_ab = sid_prefix(candidate, "ab")
+        candidate_abc = sid_prefix(candidate, "abc")
+        if candidate in seen or candidate_ab == target_ab or abc_counts[candidate_abc] > 0:
             continue
-        ranked.append(candidate)
-        seen.add(candidate)
-        if len(ranked) == top_k:
+        if _append_candidate(ranked, seen, abc_counts, candidate, top_k=top_k):
             return ranked
+        same_a_added += 1
+        if same_a_added == SAME_A_QUOTA:
+            break
 
     global_candidates = sorted(sid_space, key=lambda sid: _ranking_key(sid, target_counts))
     for candidate in global_candidates:
-        if candidate in seen or sid_prefix(candidate, "abc") == target_abc:
+        candidate_abc = sid_prefix(candidate, "abc")
+        if candidate in seen or abc_counts[candidate_abc] > 0:
             continue
-        ranked.append(candidate)
-        seen.add(candidate)
-        if len(ranked) == top_k:
-            return ranked
-
-    for candidate in global_candidates:
-        if candidate in seen:
-            continue
-        ranked.append(candidate)
-        seen.add(candidate)
-        if len(ranked) == top_k:
+        if _append_candidate(ranked, seen, abc_counts, candidate, top_k=top_k):
             return ranked
 
     raise ValueError(f"Could not construct {top_k} ranked SIDs for target {target_sid!r}.")

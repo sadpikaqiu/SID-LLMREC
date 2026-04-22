@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from gnprsid.alignment.semantic import sid_prefix
 from gnprsid.common.io import iter_jsonl, write_json, write_jsonl
 from gnprsid.warmup.build_data import build_ranked_sid_targets, build_warmup_data
 
@@ -48,6 +49,8 @@ def test_build_ranked_sid_targets_prefers_shared_prefixes():
     assert ranked[2] == "<a_1><b_1><c_2>"
     assert ranked[3] == "<a_1><b_2><c_1>"
     assert len(ranked) == 10
+    non_target_abc = [sid_prefix(sid, "abc") for sid in ranked[2:]]
+    assert len(non_target_abc) == len(set(non_target_abc))
 
 
 def test_build_ranked_sid_targets_caps_same_abc_prefix_when_alternatives_exist():
@@ -81,6 +84,8 @@ def test_build_ranked_sid_targets_caps_same_abc_prefix_when_alternatives_exist()
     assert same_abc_count == 2
     assert "<a_1><b_1><c_2>" in ranked
     assert "<a_1><b_2><c_1>" in ranked
+    non_target_abc = [sid_prefix(sid, "abc") for sid in ranked if sid_prefix(sid, "abc") != target_abc]
+    assert len(non_target_abc) == len(set(non_target_abc))
 
 
 def test_build_warmup_data_writes_direct10_targets(monkeypatch, tmp_path):

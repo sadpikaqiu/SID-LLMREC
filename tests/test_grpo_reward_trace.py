@@ -2,7 +2,7 @@ import json
 import sys
 
 from gnprsid import cli
-from gnprsid.grpo.plot_rewards import build_reward_trace_report
+from gnprsid.grpo.plot_rewards import _downsample_xy, build_reward_trace_report
 from gnprsid.grpo.reward_current_top10 import compute_score
 
 
@@ -160,6 +160,18 @@ def test_build_reward_trace_report_defaults_to_outputs_tree(monkeypatch, tmp_pat
     assert expected_output.exists()
     assert expected_output.with_suffix(".csv").exists()
     assert expected_output.with_suffix(".summary.json").exists()
+
+
+def test_downsample_xy_caps_point_count_and_averages_buckets():
+    x_values = list(range(1, 11))
+    y_values = [float(value) for value in range(10)]
+
+    down_x, down_y = _downsample_xy(x_values, y_values, max_points=4)
+
+    assert len(down_x) <= 4
+    assert len(down_x) == len(down_y)
+    assert down_x == [3, 6, 9, 10]
+    assert down_y == [1.0, 4.0, 7.0, 9.0]
 
 
 def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):

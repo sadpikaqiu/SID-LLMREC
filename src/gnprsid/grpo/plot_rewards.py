@@ -284,6 +284,23 @@ def _render_svg_chart(
     )
 
 
+def _downsample_xy(x_values: list[int], y_values: list[float], max_points: int) -> tuple[list[int], list[float]]:
+    if len(x_values) <= max_points or max_points <= 1:
+        return x_values, y_values
+
+    bucket_size = math.ceil(len(x_values) / max_points)
+    downsampled_x: list[int] = []
+    downsampled_y: list[float] = []
+    for start in range(0, len(x_values), bucket_size):
+        bucket_x = x_values[start : start + bucket_size]
+        bucket_y = y_values[start : start + bucket_size]
+        if not bucket_x:
+            continue
+        downsampled_x.append(bucket_x[-1])
+        downsampled_y.append(sum(bucket_y) / len(bucket_y))
+    return downsampled_x, downsampled_y
+
+
 def _render_compact_svg_chart(
     title: str,
     x_values: list[int],
@@ -299,6 +316,8 @@ def _render_compact_svg_chart(
     bottom = 48
     plot_width = width - left - right
     plot_height = height - top - bottom
+
+    x_values, y_values = _downsample_xy(x_values, y_values, max_points=plot_width)
 
     y_ticks, y_min, y_max = _build_y_ticks(y_values)
     x_ticks = _build_x_ticks(x_values, max_ticks=4)

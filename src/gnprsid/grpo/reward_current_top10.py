@@ -58,6 +58,11 @@ def _prefix_match_score(predictions: Iterable[str], target: str) -> float:
     return total / 30.0
 
 
+def _reciprocal_rank_boost(rank: int) -> float:
+    capped_rank = min(max(rank, 1), 10)
+    return 1.0 + (10 - capped_rank) / 10.0
+
+
 def compute_score(
     data_source: str,
     solution_str: str,
@@ -79,9 +84,11 @@ def compute_score(
 
     reciprocal_rank_reward = 0.0
     soft_hit_reward = 0.0
+    reciprocal_rank_boost = 0.0
     if ground_truth in parsed_predictions:
         rank = parsed_predictions.index(ground_truth) + 1
-        reciprocal_rank_reward = RECIPROCAL_RANK_WEIGHT * (1.0 / rank)
+        reciprocal_rank_boost = _reciprocal_rank_boost(rank)
+        reciprocal_rank_reward = RECIPROCAL_RANK_WEIGHT * (1.0 / rank) * reciprocal_rank_boost
         soft_hit_reward = SOFT_HIT_WEIGHT
 
     prefix_match_reward = PREFIX_MATCH_WEIGHT * _prefix_match_score(parsed_predictions, str(ground_truth))
@@ -106,6 +113,7 @@ def compute_score(
             "parsed_prediction_count": len(parsed_predictions),
             "hit": float(ground_truth in parsed_predictions),
             "rank": parsed_predictions.index(ground_truth) + 1 if ground_truth in parsed_predictions else None,
+            "reciprocal_rank_boost": reciprocal_rank_boost,
             "format_reward": format_reward,
             "reciprocal_rank_reward": reciprocal_rank_reward,
             "soft_hit_reward": soft_hit_reward,

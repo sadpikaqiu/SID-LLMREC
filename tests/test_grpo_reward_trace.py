@@ -122,6 +122,46 @@ def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):
     assert "diversity_reward" in html_report
 
 
+def test_build_reward_trace_report_defaults_to_outputs_tree(monkeypatch, tmp_path):
+    trace_dir = tmp_path / "checkpoints" / "NYC" / "grpo" / "qwen3_8b_sid_current" / "reward_traces"
+    trace_dir.mkdir(parents=True)
+    trace_path = trace_dir / "reward_trace_pid1.jsonl"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "time_ns": 1,
+                "pid": 1,
+                "local_record_index": 0,
+                "group_size_hint": 1,
+                "format_reward": 0.1,
+                "reciprocal_rank_reward": 0.2,
+                "soft_hit_reward": 0.3,
+                "prefix_match_reward": 0.4,
+                "diversity_reward": 0.1,
+                "total_reward": 1.1,
+                "single_line_score": 1.0,
+                "valid_count_score": 1.0,
+                "exact_ten_score": 1.0,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class FakePaths:
+        outputs = tmp_path / "outputs" / "NYC"
+
+    monkeypatch.setattr("gnprsid.grpo.plot_rewards.dataset_paths", lambda dataset: FakePaths())
+
+    summary = build_reward_trace_report(trace_dir)
+
+    expected_output = tmp_path / "outputs" / "NYC" / "reports" / "grpo" / "qwen3_8b_sid_current" / "reward_trace_report.html"
+    assert summary["output_path"] == str(expected_output)
+    assert expected_output.exists()
+    assert expected_output.with_suffix(".csv").exists()
+    assert expected_output.with_suffix(".summary.json").exists()
+
+
 def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):
     from gnprsid.grpo.inspect_trace import summarize_reward_traces
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from gnprsid.common.io import ensure_dir, write_json
+from gnprsid.common.paths import dataset_paths
 from gnprsid.grpo.reward_trace import TRACE_GROUP_SIZE_ENV
 
 
@@ -386,6 +387,23 @@ def _render_split_component_panel(
     )
 
 
+def _resolve_default_report_output_path(trace_path: Path) -> Path:
+    base_dir = trace_path if trace_path.is_dir() else trace_path.parent
+    parts = base_dir.parts
+    try:
+        checkpoints_index = parts.index("checkpoints")
+    except ValueError:
+        return base_dir / "reward_trace_report.html"
+
+    if len(parts) <= checkpoints_index + 3:
+        return base_dir / "reward_trace_report.html"
+
+    dataset = parts[checkpoints_index + 1]
+    stage = parts[checkpoints_index + 2]
+    run_name = parts[checkpoints_index + 3]
+    return dataset_paths(dataset).outputs / "reports" / stage / run_name / "reward_trace_report.html"
+
+
 def build_reward_trace_report(
     trace_path: str | Path,
     output_path: str | Path | None = None,
@@ -399,8 +417,7 @@ def build_reward_trace_report(
     frame = _build_step_frame(rows, resolved_group_size)
 
     if output_path is None:
-        base_dir = trace_path if trace_path.is_dir() else trace_path.parent
-        output_path = base_dir / "reward_trace_report.html"
+        output_path = _resolve_default_report_output_path(trace_path)
     output_path = Path(output_path)
 
     if csv_path is None:

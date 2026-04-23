@@ -2,7 +2,7 @@ import json
 import sys
 
 from gnprsid import cli
-from gnprsid.grpo.plot_rewards import _downsample_xy, build_reward_trace_report
+from gnprsid.grpo.plot_rewards import _downsample_series_map, _downsample_xy, build_reward_trace_report
 from gnprsid.grpo.reward_current_top10 import compute_score
 
 
@@ -195,6 +195,55 @@ def test_downsample_xy_caps_point_count_and_averages_buckets():
     assert len(down_x) == len(down_y)
     assert down_x == [3, 6, 9, 10]
     assert down_y == [1.0, 4.0, 7.0, 9.0]
+
+
+def test_downsample_series_map_uses_shared_buckets():
+    x_values = list(range(1, 11))
+    series_map = {
+        "a": [float(value) for value in range(10)],
+        "b": [float(value * 10) for value in range(10)],
+    }
+
+    down_x, down_map = _downsample_series_map(x_values, series_map, max_points=4)
+
+    assert down_x == [3, 6, 9, 10]
+    assert down_map["a"] == [1.0, 4.0, 7.0, 9.0]
+    assert down_map["b"] == [10.0, 40.0, 70.0, 90.0]
+
+
+def test_build_reward_trace_report_backfills_weighted_format_components(tmp_path):
+    trace_dir = tmp_path / "reward-traces"
+    trace_dir.mkdir()
+    trace_path = trace_dir / "reward_trace_pid1.jsonl"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "time_ns": 1,
+                "pid": 1,
+                "local_record_index": 0,
+                "group_size_hint": 1,
+                "format_reward": 0.45,
+                "reciprocal_rank_reward": 0.0,
+                "soft_hit_reward": 0.0,
+                "prefix_match_reward": 0.0,
+                "diversity_reward": 0.0,
+                "total_reward": 0.45,
+                "single_line_score": 1.0,
+                "valid_count_score": 1.0,
+                "exact_ten_score": 1.0,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output_path = tmp_path / "report.html"
+    build_reward_trace_report(trace_dir, output_path=output_path)
+    csv_rows = (tmp_path / "report.csv").read_text(encoding="utf-8")
+
+    assert "0.1" in csv_rows
+    assert "0.25" in csv_rows
+    assert "0.15" in csv_rows
 
 
 def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):

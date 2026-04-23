@@ -11,6 +11,12 @@ import pandas as pd
 
 from gnprsid.common.io import ensure_dir, write_json
 from gnprsid.common.paths import dataset_paths
+from gnprsid.grpo.reward_current_top10 import (
+    EXACT_TEN_COMPONENT_WEIGHT,
+    FORMAT_WEIGHT,
+    SINGLE_LINE_COMPONENT_WEIGHT,
+    VALID_COUNT_COMPONENT_WEIGHT,
+)
 from gnprsid.grpo.reward_trace import TRACE_GROUP_SIZE_ENV
 
 
@@ -95,7 +101,7 @@ def _build_step_frame(rows: list[dict], group_size: int) -> pd.DataFrame:
         }
 
         for field in TOP_LEVEL_FIELDS + FORMAT_FIELDS + FORMAT_REWARD_FIELDS:
-            step_sum = sum(float(item.get(field, 0.0) or 0.0) for item in step_rows)
+            step_sum = sum(_resolve_reward_trace_field(item, field) for item in step_rows)
             step_mean = step_sum / len(step_rows)
             cumulative_sums[field] += step_sum
             row_payload[f"step_sum_{field}"] = step_sum
@@ -106,6 +112,21 @@ def _build_step_frame(rows: list[dict], group_size: int) -> pd.DataFrame:
         payload.append(row_payload)
 
     return pd.DataFrame(payload)
+
+
+def _resolve_reward_trace_field(row: dict, field: str) -> float:
+    value = row.get(field)
+    if value is not None:
+        return float(value or 0.0)
+
+    if field == "single_line_reward":
+        return FORMAT_WEIGHT * SINGLE_LINE_COMPONENT_WEIGHT * float(row.get("single_line_score", 0.0) or 0.0)
+    if field == "valid_count_reward":
+        return FORMAT_WEIGHT * VALID_COUNT_COMPONENT_WEIGHT * float(row.get("valid_count_score", 0.0) or 0.0)
+    if field == "exact_ten_reward":
+        return FORMAT_WEIGHT * EXACT_TEN_COMPONENT_WEIGHT * float(row.get("exact_ten_score", 0.0) or 0.0)
+
+    return 0.0
 
 
 def _nice_number(value: float, round_up: bool) -> float:
@@ -216,6 +237,8 @@ def _render_svg_chart(
     plot_width = width - left - right
     plot_height = height - top - bottom
 
+    x_values, series_map = _downsample_series_map(x_values, series_map, max_points=plot_width)
+
     all_values = [value for values in series_map.values() for value in values]
     y_ticks, y_min, y_max = _build_y_ticks(all_values)
     x_ticks = _build_x_ticks(x_values)
@@ -305,6 +328,28 @@ def _downsample_xy(x_values: list[int], y_values: list[float], max_points: int) 
         downsampled_x.append(bucket_x[-1])
         downsampled_y.append(sum(bucket_y) / len(bucket_y))
     return downsampled_x, downsampled_y
+
+
+def _downsample_series_map(
+    x_values: list[int],
+    series_map: dict[str, list[float]],
+    max_points: int,
+) -> tuple[list[int], dict[str, list[float]]]:
+    if len(x_values) <= max_points or max_points <= 1:
+        return x_values, series_map
+
+    bucket_size = math.ceil(len(x_values) / max_points)
+    downsampled_x: list[int] = []
+    downsampled_map = {label: [] for label in series_map}
+    for start in range(0, len(x_values), bucket_size):
+        bucket_x = x_values[start : start + bucket_size]
+        if not bucket_x:
+            continue
+        downsampled_x.append(bucket_x[-1])
+        for label, values in series_map.items():
+            bucket_y = values[start : start + bucket_size]
+            downsampled_map[label].append(sum(bucket_y) / len(bucket_y))
+    return downsampled_x, downsampled_map
 
 
 def _render_compact_svg_chart(

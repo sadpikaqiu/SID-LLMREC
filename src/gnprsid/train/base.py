@@ -240,6 +240,14 @@ def _cleanup_grpo_runtime_processes() -> list[list[str]]:
     return attempted
 
 
+def _clear_reward_trace_dir(trace_dir: Path) -> int:
+    removed = 0
+    for trace_file in trace_dir.glob("*.jsonl"):
+        trace_file.unlink(missing_ok=True)
+        removed += 1
+    return removed
+
+
 def _prepend_pythonpath(env: dict[str, str], extra_path: Path) -> None:
     existing = env.get("PYTHONPATH", "")
     extra = str(extra_path)
@@ -553,6 +561,9 @@ class GRPOMsSwiftBackend(TrainingBackend):
         offload_model = bool(cfg.get("offload_model", cfg.get("actor_param_offload", False)))
         offload_optimizer = bool(cfg.get("offload_optimizer", cfg.get("actor_optimizer_offload", False)))
         reward_trace_dir = ensure_dir(output_dir / "reward_traces")
+        cleared_trace_files = _clear_reward_trace_dir(reward_trace_dir)
+        if cleared_trace_files:
+            logger.info("Cleared %s stale reward trace files from %s", cleared_trace_files, reward_trace_dir)
         ms_swift_config = {
             "rlhf_type": "grpo",
             "model": str(init_model_path),

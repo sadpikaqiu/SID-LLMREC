@@ -15,6 +15,12 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     valid_path.write_text('{"messages":[]}\n', encoding="utf-8")
     init_model_path.mkdir()
     reward_path.write_text("def compute_score(*args, **kwargs):\n    return 0.0\n", encoding="utf-8")
+    reward_trace_dir = output_dir / "reward_traces"
+    reward_trace_dir.mkdir(parents=True)
+    stale_trace = reward_trace_dir / "reward_trace_pid1.jsonl"
+    stale_trace.write_text('{"old": true}\n', encoding="utf-8")
+    keep_file = reward_trace_dir / "report.html"
+    keep_file.write_text("<html></html>", encoding="utf-8")
 
     config_path = tmp_path / "grpo.yaml"
     dump_yaml(
@@ -72,6 +78,8 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
     assert captured["env"]["GNPRSID_GRPO_REWARD_NAME"] == "compute_score"
     assert captured["env"]["NPROC_PER_NODE"] == "8"
     assert "src" in captured["env"]["PYTHONPATH"]
+    assert not stale_trace.exists()
+    assert keep_file.exists()
 
     generated_cfg = load_yaml(runtime_dir / "ms_swift_grpo.yaml")
     assert generated_cfg["rlhf_type"] == "grpo"

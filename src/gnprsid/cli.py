@@ -66,6 +66,9 @@ def build_parser() -> argparse.ArgumentParser:
     grpo_inspect = grpo_sub.add_parser("inspect-trace")
     grpo_inspect.add_argument("--trace-path", required=True)
     grpo_inspect.add_argument("--top-k", type=int, default=10)
+    grpo_inspect_single_line = grpo_sub.add_parser("inspect-single-line")
+    grpo_inspect_single_line.add_argument("--trace-path", required=True)
+    grpo_inspect_single_line.add_argument("--top-k", type=int, default=10)
     grpo_plot = grpo_sub.add_parser("plot-trace")
     grpo_plot.add_argument("--trace-path", required=True)
     grpo_plot.add_argument("--output-path", default=None)
@@ -220,6 +223,10 @@ def main() -> None:
             from gnprsid.grpo.inspect_trace import summarize_reward_traces
 
             result = summarize_reward_traces(trace_path=args.trace_path, top_k=args.top_k)
+        elif args.grpo_command == "inspect-single-line":
+            from gnprsid.grpo.inspect_single_line import inspect_single_line_failures
+
+            result = inspect_single_line_failures(trace_path=args.trace_path, top_k=args.top_k)
         elif args.grpo_command == "plot-trace":
             from gnprsid.grpo.plot_rewards import build_reward_trace_report
 

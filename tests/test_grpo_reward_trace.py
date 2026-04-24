@@ -2,6 +2,7 @@ import json
 import sys
 
 from gnprsid import cli
+from gnprsid.grpo.inspect_single_line import inspect_single_line_failures
 from gnprsid.grpo.plot_rewards import _downsample_series_map, _downsample_xy, build_reward_trace_report
 from gnprsid.grpo.reward_current_top10 import compute_score
 
@@ -283,6 +284,51 @@ def test_summarize_reward_traces_reports_common_output_patterns(tmp_path):
     assert summary["top_solution_previews"][0]["count"] == 2
 
 
+def test_inspect_single_line_failures_separates_single_and_multi_line_rows(tmp_path):
+    trace_dir = tmp_path / "reward-traces"
+    trace_dir.mkdir()
+    trace_path = trace_dir / "reward_trace_pid1.jsonl"
+    rows = [
+        {
+            "solution_preview": "<a_1><b_2><c_3>",
+            "single_line_score": 1.0,
+            "parsed_prediction_count": 1,
+            "valid_count_score": 0.1,
+            "exact_ten_score": 0.0,
+            "hit": 1.0,
+            "total_reward": 1.2,
+        },
+        {
+            "solution_preview": "<a_1><b_2><c_3> <a_4><b_5><c_6>",
+            "single_line_score": 0.0,
+            "parsed_prediction_count": 2,
+            "valid_count_score": 0.2,
+            "exact_ten_score": 0.0,
+            "hit": 0.0,
+            "total_reward": 0.5,
+        },
+        {
+            "solution_preview": "<a_1><b_2><c_3> <a_7><b_8><c_9>",
+            "single_line_score": 0.0,
+            "parsed_prediction_count": 2,
+            "valid_count_score": 0.2,
+            "exact_ten_score": 0.0,
+            "hit": 0.0,
+            "total_reward": 0.4,
+        },
+    ]
+    trace_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    summary = inspect_single_line_failures(trace_dir, top_k=2)
+
+    assert summary["single_line_rate"] == 1 / 3
+    assert summary["multi_line_rate"] == 2 / 3
+    assert summary["single_line_summary"]["row_count"] == 1
+    assert summary["multi_line_summary"]["row_count"] == 2
+    assert summary["multi_line_summary"]["parsed_prediction_count_histogram"] == {2: 2}
+    assert summary["top_multi_line_previews"][0]["count"] == 1
+
+
 def test_cli_plot_trace_dispatches_to_html_report_builder(monkeypatch):
     calls = {}
 
@@ -319,4 +365,34 @@ def test_cli_plot_trace_dispatches_to_html_report_builder(monkeypatch):
         "csv_path": "report.csv",
         "summary_path": "report.summary.json",
         "group_size": 8,
+    }
+
+
+def test_cli_inspect_single_line_dispatches(monkeypatch):
+    calls = {}
+
+    def fake_inspect_single_line_failures(**kwargs):
+        calls.update(kwargs)
+        return {"trace_path": "reward_traces"}
+
+    monkeypatch.setattr("gnprsid.grpo.inspect_single_line.inspect_single_line_failures", fake_inspect_single_line_failures)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gnprsid.cli",
+            "grpo",
+            "inspect-single-line",
+            "--trace-path",
+            "reward_traces",
+            "--top-k",
+            "7",
+        ],
+    )
+
+    cli.main()
+
+    assert calls == {
+        "trace_path": "reward_traces",
+        "top_k": 7,
     }

@@ -59,3 +59,15 @@ def test_grpo_reward_boosts_top_ranks_more_than_plain_inverse_rank():
     )
     expected = 0.5 + (1.0 / 2.0) * 1.8 + 1.0 + 0.2 * (3 / 30) + 0.1
     assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)
+
+
+def test_grpo_reward_ignores_leading_think_block_when_scoring_format():
+    target = "<a_1><b_2><c_3>"
+    prediction = (
+        "<think>\nreasoning...\n</think>\n"
+        "<a_1><b_2><c_3> <a_4><b_5><c_6> <a_7><b_8><c_9> <a_10><b_11><c_12> "
+        "<a_13><b_14><c_15> <a_16><b_17><c_18> <a_19><b_20><c_21> <a_22><b_23><c_24> "
+        "<a_25><b_26><c_27> <a_28><b_29><c_30>"
+    )
+    expected = 0.5 + 1.9 + 1.0 + 0.2 * (3 / 30) + 0.1
+    assert isclose(compute_score("any", prediction, target), expected, abs_tol=1e-7)

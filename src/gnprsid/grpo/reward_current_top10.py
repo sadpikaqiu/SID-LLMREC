@@ -8,6 +8,7 @@ from gnprsid.grpo.reward_trace import append_reward_trace
 
 SID_PATTERN = r"<a_\d+><b_\d+><c_\d+>(?:<d_\d+>)?"
 SID_TOKEN_PATTERN = r"<[a-z]_\d+>"
+LEADING_THINK_BLOCK_PATTERN = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
 
 FORMAT_WEIGHT = 0.5
 SINGLE_LINE_COMPONENT_WEIGHT = 0.2
@@ -28,6 +29,15 @@ def _extract_predictions(text: str) -> list[str]:
         seen.add(match)
         predictions.append(match)
     return predictions[:10]
+
+
+def _strip_leading_think_blocks(text: str) -> str:
+    stripped = text
+    while True:
+        updated = LEADING_THINK_BLOCK_PATTERN.sub("", stripped, count=1)
+        if updated == stripped:
+            return stripped
+        stripped = updated
 
 
 def _is_single_line_output(solution_str: str) -> bool:
@@ -71,8 +81,9 @@ def compute_score(
 ) -> float:
     del data_source
 
-    parsed_predictions = _extract_predictions(solution_str)
-    single_line_score = float(_is_single_line_output(solution_str))
+    scored_solution_str = _strip_leading_think_blocks(solution_str)
+    parsed_predictions = _extract_predictions(scored_solution_str)
+    single_line_score = float(_is_single_line_output(scored_solution_str))
     valid_count_score = len(parsed_predictions) / 10.0
     exact_ten_score = float(len(parsed_predictions) == 10)
     single_line_reward = FORMAT_WEIGHT * SINGLE_LINE_COMPONENT_WEIGHT * single_line_score
@@ -108,6 +119,7 @@ def compute_score(
         extra_info,
         {
             "solution_preview": _preview_text(solution_str),
+            "scored_solution_preview": _preview_text(scored_solution_str),
             "solution_char_length": len(solution_str),
             "parsed_predictions": parsed_predictions,
             "single_line_score": single_line_score,

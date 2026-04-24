@@ -36,7 +36,27 @@ def test_reward_trace_logging_writes_jsonl(monkeypatch, tmp_path):
     assert rows[0]["valid_count_reward"] > 0.0
     assert rows[0]["exact_ten_reward"] == 0.0
     assert rows[0]["solution_preview"] == "<a_1><b_2><c_3> <a_4><b_5><c_6>"
+    assert rows[0]["scored_solution_preview"] == "<a_1><b_2><c_3> <a_4><b_5><c_6>"
     assert rows[0]["parsed_predictions"] == ["<a_1><b_2><c_3>", "<a_4><b_5><c_6>"]
+
+
+def test_reward_trace_logging_keeps_raw_preview_but_scores_after_leading_think(monkeypatch, tmp_path):
+    trace_dir = tmp_path / "reward-traces"
+    monkeypatch.setenv("GNPRSID_REWARD_TRACE_DIR", str(trace_dir))
+    monkeypatch.setenv("GNPRSID_REWARD_TRACE_GROUP_SIZE", "4")
+
+    score = compute_score(
+        "any",
+        "<think>\nreasoning...\n</think>\n<a_1><b_2><c_3> <a_4><b_5><c_6>",
+        "<a_1><b_2><c_3>",
+    )
+
+    trace_files = list(trace_dir.glob("*.jsonl"))
+    rows = [json.loads(line) for line in trace_files[0].read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows[0]["solution_preview"].startswith("<think>")
+    assert rows[0]["scored_solution_preview"] == "<a_1><b_2><c_3> <a_4><b_5><c_6>"
+    assert rows[0]["single_line_score"] == 1.0
+    assert rows[0]["total_reward"] == score
 
 
 def test_build_reward_trace_report_groups_rows_into_synthetic_steps(tmp_path):

@@ -13,7 +13,7 @@ num_train_epochs: 4
 learning_rate: 1.0e-5
 cutoff_len: 512
 seed: 42
-wandb_project: gnprsid-alignment
+wandb_project: sigma-poi-alignment
 wandb_run_name: nyc-align-phase-b2
 lora:
   r: 16

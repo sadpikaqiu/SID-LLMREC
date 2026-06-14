@@ -45,7 +45,7 @@ def test_run_training_stage_grpo_builds_ms_swift_command(monkeypatch, tmp_path):
             "offload_model": True,
             "offload_optimizer": True,
             "vllm_tensor_parallel_size": 1,
-            "project_name": "gnprsid-grpo",
+            "project_name": "sigma-poi-grpo",
             "experiment_name": "nyc-sid-current-qwen3",
             "report_to": "none",
             "lora": {

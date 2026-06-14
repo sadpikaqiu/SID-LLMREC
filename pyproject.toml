@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gnprsid"
+name = "sigma-poi"
 version = "0.1.0"
-description = "Linux-first GNPR-SID V2 research pipeline"
+description = "SIGMA-POI next-POI recommendation research pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

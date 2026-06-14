@@ -1,1 +1,1 @@
-"""Common helpers for the GNPR-SID pipeline."""
+"""Common helpers for the SIGMA-POI pipeline."""

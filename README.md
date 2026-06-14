@@ -1,6 +1,6 @@
-# GNPR-SID
+# SIGMA-POI
 
-Linux-first refactor of GNPR-SID built around the V2 pipeline:
+SIGMA-POI is a Linux-first research pipeline for semantic-ID based next-POI recommendation:
 
 - POI embedding
 - cosine+EMA SID training/export
@@ -13,7 +13,7 @@ Linux-first refactor of GNPR-SID built around the V2 pipeline:
 
 ## Layout
 
-- `src/gnprsid/`: core package
+- `src/gnprsid/`: core package; the import namespace is kept stable for existing scripts
 - `configs/`: YAML configs
 - `data/`: imported and prepared dataset assets
 - `artifacts/`: SID, retrieval, and alignment artifacts
@@ -30,7 +30,7 @@ Detailed Chinese documentation:
 ## Primary CLI
 
 ```bash
-python -m gnprsid.cli data import-legacy --dataset NYC --legacy-root /path/to/old/GNPR-SID
+python -m gnprsid.cli data import-legacy --dataset NYC --legacy-root /path/to/old/SIGMA-POI
 python -m gnprsid.cli data prepare-nyc --dataset NYC
 python -m gnprsid.cli sid train --config configs/train/sid_nyc.yaml
 python -m gnprsid.cli sid export --config configs/train/sid_nyc.yaml
@@ -57,7 +57,7 @@ python -m gnprsid.cli eval summarize --dataset NYC
 ```bash
 export PYTHONPATH=$PWD/src
 
-python -m gnprsid.cli data import-legacy --dataset NYC --legacy-root /path/to/legacy/GNPR-SID
+python -m gnprsid.cli data import-legacy --dataset NYC --legacy-root /path/to/legacy/SIGMA-POI
 python -m gnprsid.cli data prepare-nyc --dataset NYC --current-k 49
 
 python -m gnprsid.cli sid train --config configs/train/sid_nyc.yaml

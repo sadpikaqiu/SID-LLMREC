@@ -580,7 +580,7 @@ def build_reward_trace_report(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build an HTML reward trace report from GNPR-SID GRPO reward logs.")
+    parser = argparse.ArgumentParser(description="Build an HTML reward trace report from SIGMA-POI GRPO reward logs.")
     parser.add_argument("--trace-path", required=True, help="Reward trace directory or a single JSONL trace file.")
     parser.add_argument("--output-path", default=None, help="HTML report output path.")
     parser.add_argument("--csv-path", default=None, help="CSV summary output path.")

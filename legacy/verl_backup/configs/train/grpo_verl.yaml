@@ -35,7 +35,7 @@ save_freq: 100
 test_freq: 100
 total_epochs: 3
 trainer_use_legacy_worker_impl: enable
-project_name: gnprsid-grpo
+project_name: sigma-poi-grpo
 experiment_name: nyc-sid-current
 logger: "[console]"
 lora:

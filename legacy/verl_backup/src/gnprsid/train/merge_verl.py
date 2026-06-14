@@ -39,7 +39,7 @@ def merge_verl_actor(
         raise FileNotFoundError(f"Expected Hugging Face config files under {hf_dir}")
 
     if backend != "fsdp":
-        raise NotImplementedError("The first GNPR-SID GRPO version only supports backend='fsdp'.")
+        raise NotImplementedError("The first SIGMA-POI GRPO version only supports backend='fsdp'.")
 
     config = ModelMergerConfig(
         operation="merge",

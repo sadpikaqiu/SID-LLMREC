@@ -38,7 +38,7 @@ dataloader_num_workers: 4
 report_to: none
 n_gpus_per_node: 4
 nnodes: 1
-project_name: gnprsid-grpo
+project_name: sigma-poi-grpo
 experiment_name: nyc-sid-current-qwen3
 lora:
   r: 16

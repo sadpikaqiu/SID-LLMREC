@@ -597,7 +597,7 @@ class GRPOMsSwiftBackend(TrainingBackend):
             "eval_strategy": "steps",
             "save_total_limit": int(cfg.get("save_total_limit", 2)),
             "report_to": str(cfg.get("report_to", "none")),
-            "run_name": str(cfg.get("experiment_name", "gnprsid-grpo")),
+            "run_name": str(cfg.get("experiment_name", "sigma-poi-grpo")),
             "use_vllm": bool(cfg.get("use_vllm", True)),
             "vllm_mode": str(cfg.get("vllm_mode", "colocate")),
             "vllm_gpu_memory_utilization": float(

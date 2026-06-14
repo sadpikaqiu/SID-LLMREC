@@ -5,7 +5,7 @@ import json
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Linux-first GNPR-SID CLI")
+    parser = argparse.ArgumentParser(description="SIGMA-POI CLI")
     subparsers = parser.add_subparsers(dest="command_group", required=True)
 
     data_parser = subparsers.add_parser("data")

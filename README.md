@@ -21,11 +21,21 @@ SIGMA-POI is a Linux-first research pipeline for semantic-ID based next-POI reco
 - `outputs/`: predictions, metrics, and summaries
 - `docs/`: project documents
 
-## Chinese Guide
+## Dataset
 
-Detailed Chinese documentation:
+This repository provides the Foursquare-NYC dataset for convenient demonstration and evaluation. The NYC raw data is placed under `data/NYC/raw/`, and the project CLI can prepare the processed samples, semantic-ID artifacts, retrieval assets, predictions, and evaluation outputs used by the examples below.
 
-- `docs/项目使用手册.zh-CN.md`
+## Environment and Frameworks
+
+SIGMA-POI is tested as a Linux-first training pipeline and requires Python 3.10 or newer. GPU acceleration is strongly recommended for model training, alignment, SFT, and GRPO runs.
+
+Core Python dependencies are declared in `pyproject.toml`, including `torch`, `transformers`, `datasets`, `peft`, `trl`, `sentence-transformers`, `numpy`, `pandas`, `scikit-learn`, `pyarrow`, and related utilities. The main training frameworks are:
+
+- `TRL` + `PEFT` for semantic-ID alignment SFT and LoRA adapter training
+- `LLaMA-Factory` for recommendation-task SFT / warmup training through `llamafactory-cli`
+- `ms-swift` for GRPO / RLHF training through the `swift` CLI
+- `Transformers` and `PyTorch` for model loading, inference, adapter merging, and local training components
+- optional `vLLM`, FlashAttention, `accelerate`, and `wandb` support for faster or logged multi-GPU training runs
 
 ## Primary CLI
 
@@ -36,105 +46,23 @@ python -m gnprsid.cli sid train --config configs/train/sid_nyc.yaml
 python -m gnprsid.cli sid export --config configs/train/sid_nyc.yaml
 python -m gnprsid.cli alignment build-data --dataset NYC --semantic-schema semantic_spatial_v2 --grid-size 8 --split-by abc
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_a.yaml
-python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_a/final
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen3_8b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_a/final
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b1.yaml
-python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b1/final
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen3_8b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b1/final
 python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b2.yaml
-python -m gnprsid.cli train merge-peft --model-config configs/models/qwen25_7b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/final
+python -m gnprsid.cli train merge-peft --model-config configs/models/qwen3_8b.yaml --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/final
 python -m gnprsid.cli alignment evaluate --dataset NYC --model-config configs/models/qwen25_7b.yaml --task sid_to_abc_profile
 python -m gnprsid.cli grpo build-data --dataset NYC --model-profile qwen3-8b-instruct
 python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_ms_swift_qwen3.yaml
 python -m gnprsid.cli train merge-peft --model-config configs/models/qwen3_8b.yaml --adapter-path checkpoints/NYC/grpo/qwen3_8b_sid_current/checkpoint-100
 python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
 python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test --config configs/retrieval/default.yaml
-python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current --model-config configs/models/qwen25_7b.yaml --decoding-mode direct
+python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current --model-config configs/models/qwen3_8b.yaml --decoding-mode direct
 python -m gnprsid.cli eval run --predictions outputs/NYC/predictions/run.json
 python -m gnprsid.cli eval summarize --dataset NYC
 ```
 
-## Recommended Linux Order
 
-```bash
-export PYTHONPATH=$PWD/src
+## Acknowledgements
 
-python -m gnprsid.cli data import-legacy --dataset NYC --legacy-root /path/to/legacy/SIGMA-POI
-python -m gnprsid.cli data prepare-nyc --dataset NYC --current-k 49
-
-python -m gnprsid.cli sid train --config configs/train/sid_nyc.yaml
-python -m gnprsid.cli sid export --config configs/train/sid_nyc.yaml
-
-python -m gnprsid.cli data prepare-nyc --dataset NYC --current-k 49 \
-  --sid-map-path artifacts/NYC/sid/pid_to_sid.json
-
-python -m gnprsid.cli alignment build-data --dataset NYC \
-  --sid-map-path artifacts/NYC/sid/pid_to_sid.json \
-  --semantic-schema semantic_spatial_v2 \
-  --grid-size 8 \
-  --split-by abc
-
-python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_a.yaml
-python -m gnprsid.cli train merge-peft \
-  --model-config configs/models/qwen25_7b.yaml \
-  --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_a/final
-python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b1.yaml
-python -m gnprsid.cli train merge-peft \
-  --model-config configs/models/qwen25_7b.yaml \
-  --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b1/final
-python -m gnprsid.cli train run --stage alignment --config configs/train/alignment_phase_b2.yaml
-python -m gnprsid.cli train merge-peft \
-  --model-config configs/models/qwen25_7b.yaml \
-  --adapter-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/final
-python -m gnprsid.cli alignment evaluate \
-  --dataset NYC \
-  --model-config configs/models/qwen25_7b.yaml \
-  --checkpoint-path checkpoints/NYC/alignment/qwen25_7b_phase_b2/merged \
-  --task sid_to_abc_profile
-python -m gnprsid.cli train run --stage sft --config configs/train/sft_llamafactory.yaml
-
-python -m gnprsid.cli train merge-peft \
-  --model-config configs/models/qwen25_7b.yaml \
-  --adapter-path checkpoints/NYC/sft/qwen25_7b_sid_current/llamafactory_output \
-  --output-path checkpoints/NYC/sft/qwen25_7b_sid_current/merged_best_2300_sft
-
-python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source current \
-  --model-config configs/models/qwen25_7b.yaml \
-  --checkpoint-path checkpoints/NYC/sft/qwen25_7b_sid_current/llamafactory_output \
-  --decoding-mode direct \
-  --output-path outputs/NYC/predictions/sid_current_test_direct.json
-
-python -m gnprsid.cli eval run \
-  --predictions outputs/NYC/predictions/sid_current_test_direct.json \
-  --output-path outputs/NYC/eval/eval_sid_current_direct.json
-
-python -m gnprsid.cli grpo build-data --dataset NYC --model-profile qwen3-8b-instruct
-python -m gnprsid.cli train run --stage grpo --config configs/train/grpo_ms_swift_qwen3.yaml
-python -m gnprsid.cli train merge-peft \
-  --model-config configs/models/qwen3_8b.yaml \
-  --adapter-path checkpoints/NYC/grpo/qwen3_8b_sid_current/checkpoint-100 \
-  --output-path checkpoints/NYC/grpo/qwen3_8b_sid_current/checkpoint-100-merged
-
-python -m gnprsid.cli retrieval build-bank --dataset NYC --repr sid
-python -m gnprsid.cli retrieval build-similar --dataset NYC --repr sid --split test \
-  --config configs/retrieval/default.yaml --model-config configs/models/qwen25_7b.yaml
-
-python -m gnprsid.cli infer batch --dataset NYC --repr sid --history-source retrieval \
-  --model-config configs/models/qwen25_7b.yaml \
-  --checkpoint-path checkpoints/NYC/sft/qwen25_7b_sid_current/llamafactory_output
-
-python -m gnprsid.cli eval run \
-  --predictions outputs/NYC/predictions/sid_retrieval_test.json
-
-python -m gnprsid.cli eval summarize --dataset NYC
-```
-
-## Notes
-
-- The legacy project stays untouched. Import once, then operate entirely inside this project.
-- Official retrieval defaults use `Qwen2.5-7B-Instruct + bf16 + mean pooling + max_length=2048`.
-- Alignment now targets the semantic core only: `Category`, `Region`, and `Geo bucket`, with `abc` as the semantic endpoint and `d` excluded from the main loss.
-- Reverse alignment tasks are multiple-choice prefix grounding tasks instead of open-ended full attribute reconstruction, because `profile -> a/ab/abc` is not one-to-one on NYC.
-- NYC import enriches `poi_info.csv` with latitude/longitude from the raw `NYC.txt` check-in table so semantic geo buckets can be computed during alignment build-data.
-- `infer batch` now supports both `candidate_constrained` and `direct` decoding.
-- The GRPO mainline is `direct`: RL directly optimizes a one-line top10 semantic-ID response.
-- `candidate_constrained` remains the strong deployment baseline and comparison target.
-- GRPO uses `ms-swift` with a repo-local external reward plugin and keeps the previous `verl` assets archived under `legacy/verl_backup/`.
+Part of this codebase is designed based on [wds1996/GNPR-SID](https://github.com/wds1996/GNPR-SID). We thank the original authors for releasing their implementation and research artifacts.
